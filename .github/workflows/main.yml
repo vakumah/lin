@@ -18,14 +18,54 @@ jobs:
         sudo mv playit-linux-amd64 /usr/local/bin/playit
         sleep 5
 
-    - name: Install and Configure xRDP
+    - name: Install and Configure xRDP with Performance Optimizations
       run: |
         sudo apt update
-        sudo apt install -y xrdp xfce4 xfce4-goodies
+        # Install minimal desktop for better performance
+        sudo apt install -y xrdp lxde-core lxde-common lxterminal pcmanfm
+        
+        # Configure xrdp for maximum performance
         sudo systemctl enable xrdp
         sudo systemctl start xrdp
         sudo adduser xrdp ssl-cert
-        echo xfce4-session > ~/.xsession
+        
+        # Set lightweight LXDE instead of XFCE4
+        echo "lxsession -s LXDE -e LXDE" > ~/.xsession
+        
+        # Configure xrdp.ini for performance
+        sudo cp /etc/xrdp/xrdp.ini /etc/xrdp/xrdp.ini.backup
+        sudo tee /etc/xrdp/xrdp.ini > /dev/null <<EOF
+[Globals]
+ini_version=1
+fork=true
+port=3389
+tcp_nodelay=true
+tcp_keepalive=true
+security_layer=rdp
+crypt_level=low
+certificate=
+key_file=
+ssl_protocols=TLSv1.2, TLSv1.3
+tls_ciphers=HIGH
+max_bpp=16
+xserverbpp=16
+channel_code=1
+use_fastpath=both
+bulk_compression=true
+new_cursors=true
+cursor_file=
+cursor_cache_size=20
+
+[Xorg]
+name=Xorg
+lib=libxup.so
+username=ask
+password=ask
+ip=127.0.0.1
+port=-1
+code=20
+EOF
+        
         sudo systemctl restart xrdp
         
     - name: Set User Password
@@ -33,23 +73,93 @@ jobs:
         echo 'runner:p@ssw0rd!' | sudo chpasswd
         sudo usermod -aG sudo runner
 
-    - name: Optimize Server for RDP
+    - name: Advanced Performance Optimization
       run: |
-        # Disable unnecessary services for better performance
+        # Disable heavy services and background processes
         sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
         sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
         sudo systemctl disable unattended-upgrades || true
         sudo systemctl stop unattended-upgrades || true
+        sudo systemctl disable ModemManager || true
+        sudo systemctl stop ModemManager || true
+        sudo systemctl disable NetworkManager-wait-online || true
+        sudo systemctl disable systemd-networkd-wait-online || true
         
-        # Configure xrdp for better performance
-        sudo sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/#tcp_nodelay=1/tcp_nodelay=1/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/#tcp_keepalive=1/tcp_keepalive=1/' /etc/xrdp/xrdp.ini
+        # Optimize kernel parameters for RDP performance
+        sudo tee -a /etc/sysctl.conf > /dev/null <<EOF
+# Network optimizations for RDP
+net.core.rmem_default = 262144
+net.core.rmem_max = 16777216
+net.core.wmem_default = 262144
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 262144 16777216
+net.ipv4.tcp_wmem = 4096 262144 16777216
+net.ipv4.tcp_congestion_control = bbr
+net.core.netdev_max_backlog = 5000
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_timestamps = 1
+net.ipv4.tcp_sack = 1
+net.ipv4.tcp_no_metrics_save = 1
+vm.swappiness = 10
+EOF
+        sudo sysctl -p
         
-        # Set CPU governor to performance
+        # Set CPU governor to performance mode
         echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
         
-        # Configure firewall for RDP
+        # Disable visual effects and animations
+        export DISPLAY=:10
+        mkdir -p ~/.config/lxsession/LXDE
+        tee ~/.config/lxsession/LXDE/desktop.conf > /dev/null <<EOF
+[GTK]
+sNet/ThemeName=Adwaita
+sNet/IconThemeName=Adwaita
+sGtk/FontName=Sans 9
+iGtk/ToolbarStyle=3
+iGtk/ButtonImages=0
+iGtk/MenuImages=0
+iGtk/CursorThemeSize=18
+sGtk/CursorThemeName=Adwaita
+
+[Mouse]
+AccFactor=20
+Threshold=10
+LeftHanded=0
+MiddleButtonEmulation=0
+
+[Keyboard]
+Delay=500
+Interval=30
+Beep=1
+
+[State]
+guimode=Simple
+EOF
+        
+        # Configure lightweight file manager
+        mkdir -p ~/.config/pcmanfm/LXDE
+        tee ~/.config/pcmanfm/LXDE/pcmanfm.conf > /dev/null <<EOF
+[config]
+bm_open_method=0
+su_cmd=gksu %s
+volume_management_enabled=1
+autorun=1
+media_in_new_tab=0
+desktop_wallpaper_mode=0
+desktop_wallpaper_common=1
+desktop_bg_color=#000000
+desktop_fg_color=#ffffff
+desktop_shadow_color=#000000
+desktop_font=Sans 10
+show_thumbnail=0
+thumbnail_local=0
+thumbnail_max=0
+EOF
+        
+        # Disable compositor and animations
+        killall compton 2>/dev/null || true
+        
+        # Configure firewall
         sudo ufw allow 3389/tcp || true
 
     - name: Start Playit and Set Up RDP Tunnel
@@ -63,7 +173,8 @@ jobs:
         echo "RDP is ready on port 3389"
         echo "Username: runner"
         echo "Password: p@ssw0rd!"
-        echo "Desktop Environment: XFCE4"
+        echo "Desktop Environment: LXDE (Optimized for Performance)"
+        echo "Optimizations: Low color depth, fast compression, minimal UI"
         
     # Prevent workflow to stop
     - name: Keep the GitHub Action Runner Alive
