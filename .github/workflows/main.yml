@@ -22,53 +22,28 @@ jobs:
       run: |
         sudo apt update
         # Install minimal desktop for better performance
-        sudo apt install -y xrdp lxde-core lxde-common lxterminal pcmanfm
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp lxde-core lxde-common lxterminal pcmanfm
         
         # Configure xrdp for maximum performance
         sudo systemctl enable xrdp
-        sudo systemctl start xrdp
-        sudo adduser xrdp ssl-cert
         
         # Set lightweight LXDE instead of XFCE4
         echo "lxsession -s LXDE -e LXDE" > ~/.xsession
         
-        # Configure xrdp.ini for performance
-        sudo cp /etc/xrdp/xrdp.ini /etc/xrdp/xrdp.ini.backup
+        # Configure xrdp.ini for performance - use simple sed approach
+        sudo sed -i 's/max_bpp=32/max_bpp=16/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/#tcp_nodelay=1/tcp_nodelay=1/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/#tcp_keepalive=1/tcp_keepalive=1/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/crypt_level=high/crypt_level=low/' /etc/xrdp/xrdp.ini
         
-        # Create optimized xrdp.ini
-        sudo bash -c 'cat > /etc/xrdp/xrdp.ini << "EOF"
-        [Globals]
-        ini_version=1
-        fork=true
-        port=3389
-        tcp_nodelay=true
-        tcp_keepalive=true
-        security_layer=rdp
-        crypt_level=low
-        certificate=
-        key_file=
-        ssl_protocols=TLSv1.2, TLSv1.3
-        tls_ciphers=HIGH
-        max_bpp=16
-        xserverbpp=16
-        channel_code=1
-        use_fastpath=both
-        bulk_compression=true
-        new_cursors=true
-        cursor_file=
-        cursor_cache_size=20
+        # Add xrdp user to ssl-cert group
+        sudo adduser xrdp ssl-cert
         
-        [Xorg]
-        name=Xorg
-        lib=libxup.so
-        username=ask
-        password=ask
-        ip=127.0.0.1
-        port=-1
-        code=20
-        EOF'
+        # Start xrdp service
+        sudo systemctl start xrdp
         
-        sudo systemctl restart xrdp
+        # Check if service is running
+        sudo systemctl status xrdp --no-pager
         
     - name: Set User Password
       run: |
@@ -84,84 +59,22 @@ jobs:
         sudo systemctl stop unattended-upgrades || true
         sudo systemctl disable ModemManager || true
         sudo systemctl stop ModemManager || true
-        sudo systemctl disable NetworkManager-wait-online || true
-        sudo systemctl disable systemd-networkd-wait-online || true
-        
-        # Optimize kernel parameters for RDP performance
-        sudo bash -c 'cat >> /etc/sysctl.conf << "EOF"
-        # Network optimizations for RDP
-        net.core.rmem_default = 262144
-        net.core.rmem_max = 16777216
-        net.core.wmem_default = 262144
-        net.core.wmem_max = 16777216
-        net.ipv4.tcp_rmem = 4096 262144 16777216
-        net.ipv4.tcp_wmem = 4096 262144 16777216
-        net.ipv4.tcp_congestion_control = bbr
-        net.core.netdev_max_backlog = 5000
-        net.ipv4.tcp_window_scaling = 1
-        net.ipv4.tcp_timestamps = 1
-        net.ipv4.tcp_sack = 1
-        net.ipv4.tcp_no_metrics_save = 1
-        vm.swappiness = 10
-        EOF'
-        sudo sysctl -p
         
         # Set CPU governor to performance mode
         echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
         
-        # Disable visual effects and animations
-        export DISPLAY=:10
+        # Basic network optimizations
+        echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
+        echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
+        echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
+        sudo sysctl -p || true
+        
+        # Create simple LXDE config for better performance
         mkdir -p ~/.config/lxsession/LXDE
-        
-        # Create LXDE config
-        cat > ~/.config/lxsession/LXDE/desktop.conf << "EOF"
-        [GTK]
-        sNet/ThemeName=Adwaita
-        sNet/IconThemeName=Adwaita
-        sGtk/FontName=Sans 9
-        iGtk/ToolbarStyle=3
-        iGtk/ButtonImages=0
-        iGtk/MenuImages=0
-        iGtk/CursorThemeSize=18
-        sGtk/CursorThemeName=Adwaita
-        
-        [Mouse]
-        AccFactor=20
-        Threshold=10
-        LeftHanded=0
-        MiddleButtonEmulation=0
-        
-        [Keyboard]
-        Delay=500
-        Interval=30
-        Beep=1
-        
-        [State]
-        guimode=Simple
-        EOF
-        
-        # Configure lightweight file manager
-        mkdir -p ~/.config/pcmanfm/LXDE
-        cat > ~/.config/pcmanfm/LXDE/pcmanfm.conf << "EOF"
-        [config]
-        bm_open_method=0
-        su_cmd=gksu %s
-        volume_management_enabled=1
-        autorun=1
-        media_in_new_tab=0
-        desktop_wallpaper_mode=0
-        desktop_wallpaper_common=1
-        desktop_bg_color=#000000
-        desktop_fg_color=#ffffff
-        desktop_shadow_color=#000000
-        desktop_font=Sans 10
-        show_thumbnail=0
-        thumbnail_local=0
-        thumbnail_max=0
-        EOF
-        
-        # Disable compositor and animations
-        killall compton 2>/dev/null || true
+        echo '[GTK]' > ~/.config/lxsession/LXDE/desktop.conf
+        echo 'sNet/ThemeName=Adwaita' >> ~/.config/lxsession/LXDE/desktop.conf
+        echo 'iGtk/ButtonImages=0' >> ~/.config/lxsession/LXDE/desktop.conf
+        echo 'iGtk/MenuImages=0' >> ~/.config/lxsession/LXDE/desktop.conf
         
         # Configure firewall
         sudo ufw allow 3389/tcp || true
