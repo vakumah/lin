@@ -21,14 +21,20 @@ jobs:
     - name: Install and Configure xRDP with Performance Optimizations
       run: |
         sudo apt update
-        # Install minimal desktop for better performance
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp lxde-core lxde-common lxterminal pcmanfm
+        # Install minimal desktop with proper window manager
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp lxde-core lxde-common lxterminal pcmanfm openbox obconf lxappearance
         
         # Configure xrdp for maximum performance
         sudo systemctl enable xrdp
         
-        # Set lightweight LXDE instead of XFCE4
-        echo "lxsession -s LXDE -e LXDE" > ~/.xsession
+        # Set LXDE with Openbox window manager
+        echo "exec startlxde" > ~/.xsession
+        
+        # Configure Openbox for proper window controls
+        mkdir -p ~/.config/openbox
+        cp /etc/xdg/openbox/rc.xml ~/.config/openbox/ || true
+        cp /etc/xdg/openbox/menu.xml ~/.config/openbox/ || true
+        cp /etc/xdg/openbox/autostart ~/.config/openbox/ || true
         
         # Configure xrdp.ini for performance - use simple sed approach
         sudo sed -i 's/max_bpp=32/max_bpp=16/' /etc/xrdp/xrdp.ini
@@ -69,6 +75,145 @@ jobs:
         echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
         sudo sysctl -p || true
         
+        # Configure Openbox for better window management
+        mkdir -p ~/.config/openbox
+        
+        # Create Openbox config with proper window controls
+        cat > ~/.config/openbox/rc.xml << 'EOF'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <openbox_config xmlns="http://openbox.org/3.4/rc">
+          <resistance>
+            <strength>10</strength>
+            <screen_edge_strength>20</screen_edge_strength>
+          </resistance>
+          <focus>
+            <focusNew>yes</focusNew>
+            <followMouse>no</followMouse>
+            <focusLast>yes</focusLast>
+            <underMouse>no</underMouse>
+            <focusDelay>200</focusDelay>
+            <raiseOnFocus>no</raiseOnFocus>
+          </focus>
+          <placement>
+            <policy>Smart</policy>
+            <center>yes</center>
+            <monitor>Primary</monitor>
+            <primaryMonitor>1</primaryMonitor>
+          </placement>
+          <theme>
+            <name>Clearlooks</name>
+            <titleLayout>NLIMC</titleLayout>
+            <keepBorder>yes</keepBorder>
+            <animateIconify>no</animateIconify>
+            <font place="ActiveWindow">
+              <name>sans</name>
+              <size>8</size>
+              <weight>bold</weight>
+              <slant>normal</slant>
+            </font>
+            <font place="InactiveWindow">
+              <name>sans</name>
+              <size>8</size>
+              <weight>bold</weight>
+              <slant>normal</slant>
+            </font>
+          </theme>
+          <desktops>
+            <number>1</number>
+            <firstdesk>1</firstdesk>
+            <names>
+              <name>Desktop</name>
+            </names>
+            <popupTime>875</popupTime>
+          </desktops>
+          <resize>
+            <drawContents>yes</drawContents>
+            <popupShow>Nonpixel</popupShow>
+            <popupPosition>Center</popupPosition>
+            <popupFixedPosition>
+              <x>10</x>
+              <y>10</y>
+            </popupFixedPosition>
+          </resize>
+          <mouse>
+            <dragThreshold>1</dragThreshold>
+            <doubleClickTime>500</doubleClickTime>
+            <screenEdgeWarpTime>0</screenEdgeWarpTime>
+            <screenEdgeWarpMouse>false</screenEdgeWarpMouse>
+            <context name="Frame">
+              <mousebind button="A-Left" action="Press">
+                <action name="Focus"/>
+                <action name="Raise"/>
+              </mousebind>
+              <mousebind button="A-Left" action="Click">
+                <action name="Unshade"/>
+              </mousebind>
+              <mousebind button="A-Left" action="Drag">
+                <action name="Move"/>
+              </mousebind>
+              <mousebind button="A-Right" action="Press">
+                <action name="Focus"/>
+                <action name="Raise"/>
+                <action name="Unshade"/>
+              </mousebind>
+              <mousebind button="A-Right" action="Drag">
+                <action name="Resize"/>
+              </mousebind>
+              <mousebind button="A-Middle" action="Press">
+                <action name="Lower"/>
+                <action name="FocusToBottom"/>
+                <action name="Unfocus"/>
+              </mousebind>
+              <mousebind button="A-Up" action="Click">
+                <action name="GoToDesktop"><to>previous</to></action>
+              </mousebind>
+              <mousebind button="A-Down" action="Click">
+                <action name="GoToDesktop"><to>next</to></action>
+              </mousebind>
+              <mousebind button="C-A-Up" action="Click">
+                <action name="GoToDesktop"><to>previous</to></action>
+              </mousebind>
+              <mousebind button="C-A-Down" action="Click">
+                <action name="GoToDesktop"><to>next</to></action>
+              </mousebind>
+              <mousebind button="A-S-Up" action="Click">
+                <action name="SendToDesktop"><to>previous</to></action>
+              </mousebind>
+              <mousebind button="A-S-Down" action="Click">
+                <action name="SendToDesktop"><to>next</to></action>
+              </mousebind>
+            </context>
+            <context name="Titlebar">
+              <mousebind button="Left" action="Drag">
+                <action name="Move"/>
+              </mousebind>
+              <mousebind button="Left" action="DoubleClick">
+                <action name="ToggleMaximize"/>
+              </mousebind>
+              <mousebind button="Up" action="Click">
+                <action name="if">
+                  <shaded>no</shaded>
+                  <then>
+                    <action name="Shade"/>
+                    <action name="FocusToBottom"/>
+                    <action name="Unfocus"/>
+                  </then>
+                </action>
+              </mousebind>
+              <mousebind button="Down" action="Click">
+                <action name="if">
+                  <shaded>yes</shaded>
+                  <then>
+                    <action name="Unshade"/>
+                    <action name="Raise"/>
+                  </then>
+                </action>
+              </mousebind>
+            </context>
+          </mouse>
+        </openbox_config>
+        EOF
+        
         # Create simple LXDE config for better performance
         mkdir -p ~/.config/lxsession/LXDE
         echo '[GTK]' > ~/.config/lxsession/LXDE/desktop.conf
@@ -90,7 +235,7 @@ jobs:
         echo "RDP is ready on port 3389"
         echo "Username: runner"
         echo "Password: p@ssw0rd!"
-        echo "Desktop Environment: LXDE (Optimized for Performance)"
+        echo "Desktop Environment: LXDE with Openbox (Full Window Controls)"
         echo "Optimizations: Low color depth, fast compression, minimal UI"
         
     # Prevent workflow to stop
