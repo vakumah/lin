@@ -34,37 +34,39 @@ jobs:
         
         # Configure xrdp.ini for performance
         sudo cp /etc/xrdp/xrdp.ini /etc/xrdp/xrdp.ini.backup
-        sudo tee /etc/xrdp/xrdp.ini > /dev/null <<EOF
-[Globals]
-ini_version=1
-fork=true
-port=3389
-tcp_nodelay=true
-tcp_keepalive=true
-security_layer=rdp
-crypt_level=low
-certificate=
-key_file=
-ssl_protocols=TLSv1.2, TLSv1.3
-tls_ciphers=HIGH
-max_bpp=16
-xserverbpp=16
-channel_code=1
-use_fastpath=both
-bulk_compression=true
-new_cursors=true
-cursor_file=
-cursor_cache_size=20
-
-[Xorg]
-name=Xorg
-lib=libxup.so
-username=ask
-password=ask
-ip=127.0.0.1
-port=-1
-code=20
-EOF
+        
+        # Create optimized xrdp.ini
+        sudo bash -c 'cat > /etc/xrdp/xrdp.ini << "EOF"
+        [Globals]
+        ini_version=1
+        fork=true
+        port=3389
+        tcp_nodelay=true
+        tcp_keepalive=true
+        security_layer=rdp
+        crypt_level=low
+        certificate=
+        key_file=
+        ssl_protocols=TLSv1.2, TLSv1.3
+        tls_ciphers=HIGH
+        max_bpp=16
+        xserverbpp=16
+        channel_code=1
+        use_fastpath=both
+        bulk_compression=true
+        new_cursors=true
+        cursor_file=
+        cursor_cache_size=20
+        
+        [Xorg]
+        name=Xorg
+        lib=libxup.so
+        username=ask
+        password=ask
+        ip=127.0.0.1
+        port=-1
+        code=20
+        EOF'
         
         sudo systemctl restart xrdp
         
@@ -86,22 +88,22 @@ EOF
         sudo systemctl disable systemd-networkd-wait-online || true
         
         # Optimize kernel parameters for RDP performance
-        sudo tee -a /etc/sysctl.conf > /dev/null <<EOF
-# Network optimizations for RDP
-net.core.rmem_default = 262144
-net.core.rmem_max = 16777216
-net.core.wmem_default = 262144
-net.core.wmem_max = 16777216
-net.ipv4.tcp_rmem = 4096 262144 16777216
-net.ipv4.tcp_wmem = 4096 262144 16777216
-net.ipv4.tcp_congestion_control = bbr
-net.core.netdev_max_backlog = 5000
-net.ipv4.tcp_window_scaling = 1
-net.ipv4.tcp_timestamps = 1
-net.ipv4.tcp_sack = 1
-net.ipv4.tcp_no_metrics_save = 1
-vm.swappiness = 10
-EOF
+        sudo bash -c 'cat >> /etc/sysctl.conf << "EOF"
+        # Network optimizations for RDP
+        net.core.rmem_default = 262144
+        net.core.rmem_max = 16777216
+        net.core.wmem_default = 262144
+        net.core.wmem_max = 16777216
+        net.ipv4.tcp_rmem = 4096 262144 16777216
+        net.ipv4.tcp_wmem = 4096 262144 16777216
+        net.ipv4.tcp_congestion_control = bbr
+        net.core.netdev_max_backlog = 5000
+        net.ipv4.tcp_window_scaling = 1
+        net.ipv4.tcp_timestamps = 1
+        net.ipv4.tcp_sack = 1
+        net.ipv4.tcp_no_metrics_save = 1
+        vm.swappiness = 10
+        EOF'
         sudo sysctl -p
         
         # Set CPU governor to performance mode
@@ -110,51 +112,53 @@ EOF
         # Disable visual effects and animations
         export DISPLAY=:10
         mkdir -p ~/.config/lxsession/LXDE
-        tee ~/.config/lxsession/LXDE/desktop.conf > /dev/null <<EOF
-[GTK]
-sNet/ThemeName=Adwaita
-sNet/IconThemeName=Adwaita
-sGtk/FontName=Sans 9
-iGtk/ToolbarStyle=3
-iGtk/ButtonImages=0
-iGtk/MenuImages=0
-iGtk/CursorThemeSize=18
-sGtk/CursorThemeName=Adwaita
-
-[Mouse]
-AccFactor=20
-Threshold=10
-LeftHanded=0
-MiddleButtonEmulation=0
-
-[Keyboard]
-Delay=500
-Interval=30
-Beep=1
-
-[State]
-guimode=Simple
-EOF
+        
+        # Create LXDE config
+        cat > ~/.config/lxsession/LXDE/desktop.conf << "EOF"
+        [GTK]
+        sNet/ThemeName=Adwaita
+        sNet/IconThemeName=Adwaita
+        sGtk/FontName=Sans 9
+        iGtk/ToolbarStyle=3
+        iGtk/ButtonImages=0
+        iGtk/MenuImages=0
+        iGtk/CursorThemeSize=18
+        sGtk/CursorThemeName=Adwaita
+        
+        [Mouse]
+        AccFactor=20
+        Threshold=10
+        LeftHanded=0
+        MiddleButtonEmulation=0
+        
+        [Keyboard]
+        Delay=500
+        Interval=30
+        Beep=1
+        
+        [State]
+        guimode=Simple
+        EOF
         
         # Configure lightweight file manager
         mkdir -p ~/.config/pcmanfm/LXDE
-        tee ~/.config/pcmanfm/LXDE/pcmanfm.conf > /dev/null <<EOF
-[config]
-bm_open_method=0
-su_cmd=gksu %s
-volume_management_enabled=1
-autorun=1
-media_in_new_tab=0
-desktop_wallpaper_mode=0
-desktop_wallpaper_common=1
-desktop_bg_color=#000000
-desktop_fg_color=#ffffff
-desktop_shadow_color=#000000
-desktop_font=Sans 10
-show_thumbnail=0
-thumbnail_local=0
-thumbnail_max=0
-EOF
+        cat > ~/.config/pcmanfm/LXDE/pcmanfm.conf << "EOF"
+        [config]
+        bm_open_method=0
+        su_cmd=gksu %s
+        volume_management_enabled=1
+        autorun=1
+        media_in_new_tab=0
+        desktop_wallpaper_mode=0
+        desktop_wallpaper_common=1
+        desktop_bg_color=#000000
+        desktop_fg_color=#ffffff
+        desktop_shadow_color=#000000
+        desktop_font=Sans 10
+        show_thumbnail=0
+        thumbnail_local=0
+        thumbnail_max=0
+        EOF
         
         # Disable compositor and animations
         killall compton 2>/dev/null || true
