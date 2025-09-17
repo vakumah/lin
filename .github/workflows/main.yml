@@ -1,0 +1,71 @@
+name: Playit RDP Tunnel Linux
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-rdp-tunnel:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out the repository
+      uses: actions/checkout@v2
+
+    - name: Download and Install Playit
+      run: |
+        wget https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64
+        chmod +x playit-linux-amd64
+        sudo mv playit-linux-amd64 /usr/local/bin/playit
+        sleep 5
+
+    - name: Install and Configure xRDP
+      run: |
+        sudo apt update
+        sudo apt install -y xrdp xfce4 xfce4-goodies
+        sudo systemctl enable xrdp
+        sudo systemctl start xrdp
+        sudo adduser xrdp ssl-cert
+        echo xfce4-session > ~/.xsession
+        sudo systemctl restart xrdp
+        
+    - name: Set User Password
+      run: |
+        echo 'runner:p@ssw0rd!' | sudo chpasswd
+        sudo usermod -aG sudo runner
+
+    - name: Optimize Server for RDP
+      run: |
+        # Disable unnecessary services for better performance
+        sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
+        sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
+        sudo systemctl disable unattended-upgrades || true
+        sudo systemctl stop unattended-upgrades || true
+        
+        # Configure xrdp for better performance
+        sudo sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/#tcp_nodelay=1/tcp_nodelay=1/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/#tcp_keepalive=1/tcp_keepalive=1/' /etc/xrdp/xrdp.ini
+        
+        # Set CPU governor to performance
+        echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
+        
+        # Configure firewall for RDP
+        sudo ufw allow 3389/tcp || true
+
+    - name: Start Playit and Set Up RDP Tunnel
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
+      run: |
+        playit --secret $PLAYIT_AUTH_KEY &
+        sleep 10
+        
+        # Show connection info
+        echo "RDP is ready on port 3389"
+        echo "Username: runner"
+        echo "Password: p@ssw0rd!"
+        echo "Desktop Environment: XFCE4"
+        
+    # Prevent workflow to stop
+    - name: Keep the GitHub Action Runner Alive
+      run: |
+        sleep 21600  # Increased to 6 hours for public repo with no minute limit
