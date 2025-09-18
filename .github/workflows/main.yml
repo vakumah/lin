@@ -18,32 +18,76 @@ jobs:
         sudo mv playit-linux-amd64 /usr/local/bin/playit
         sleep 5
 
-    - name: Install xRDP with H.264 and Performance Script
+    - name: Install xRDP and LXDE with H.264 Support
       run: |
         sudo apt update
-        # Download and run xRDP installer script v1.5.4 with H.264 for better animation/video
-        cd /tmp
-        wget https://www.c-nergy.be/downloads/xRDP/xrdp-installer-1.5.4.zip
-        unzip xrdp-installer-1.5.4.zip
-        chmod +x xrdp-installer-1.5.4.sh
-        sudo ./xrdp-installer-1.5.4.sh -e  # -e for H.264 encoding
+        # Install xRDP, LXDE, and openh264 for animation performance
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp lxde lxde-common lxterminal openbox libopenh264-7
         
-        # Install lightweight DE: XFCE (better than GNOME for xRDP)
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-terminal thunar
+        # Install xRDP dependencies and H.264 codec
+        sudo apt install -y xserver-xorg-core libx264-dev
         
-        # Set XFCE session
-        echo "xfce4-session" > ~/.xsession
+        # Ensure xrdp.ini exists with optimal config
+        sudo bash -c 'cat > /etc/xrdp/xrdp.ini << EOF
+        [Globals]
+        ini_version=1
+        port=3389
+        use_compression=yes
+        crypt_level=none
+        max_bpp=15
+        tcp_nodelay=yes
+        tcp_keepalive=yes
+        tcp_send_buffer_bytes=8388608
+        tcp_recv_buffer_bytes=8388608
+        EnableXDamage=true
+        [xrdp1]
+        name=sesman-X11rdp
+        lib=libxrdp.so
+        username=ask
+        password=ask
+        ip=127.0.0.1
+        port=-1
+        code=20
+        EOF'
         
-        # Additional tweaks post-installer (for max perf)
-        sudo sed -i 's/crypt_level=low/crypt_level=None/' /etc/xrdp/xrdp.ini  # No encryption for speed
-        sudo sed -i 's/max_bpp=16/max_bpp=15/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/XServerbpp=16/XServerbpp=15/' /etc/xrdp/sesman.ini
+        # Configure sesman.ini
+        sudo bash -c 'cat > /etc/xrdp/sesman.ini << EOF
+        [Globals]
+        ListenAddress=127.0.0.1
+        ListenPort=3350
+        EnableUserWindowManager=true
+        UserWindowManager=startlxde
+        DefaultWindowManager=startlxde
+        [Security]
+        AllowRootLogin=true
+        MaxLoginRetry=4
+        TerminalServerUsers=tsusers
+        TerminalServerAdmins=tsadmins
+        [Sessions]
+        X11DisplayOffset=10
+        MaxSessions=1
+        KillDisconnected=false
+        XServerbpp=15
+        [Logging]
+        LogFile=/var/log/xrdp-sesman.log
+        LogLevel=INFO
+        EnableLog=true
+        EOF'
         
-        # Restart services
+        # Set LXDE session
+        echo "startlxde" > ~/.xsession
+        
+        # Add xrdp user to ssl-cert
+        sudo adduser xrdp ssl-cert || true
+        
+        # Enable and start services
+        sudo systemctl enable xrdp xrdp-sesman
         sudo systemctl restart xrdp xrdp-sesman
+        sudo systemctl start xrdp xrdp-sesman
         
         # Check status
         sudo systemctl status xrdp --no-pager
+        sudo systemctl status xrdp-sesman --no-pager
         
     - name: Set User Password
       run: |
@@ -63,77 +107,108 @@ jobs:
         # CPU to performance
         echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
         
-        # Network tweaks (bigger buffers for animation data)
+        # Network tweaks for animations
         echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
         echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
         echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.rmem_max=33554432' | sudo tee -a /etc/sysctl.conf  # 32MB for smoother streaming
+        echo 'net.core.rmem_max=33554432' | sudo tee -a /etc/sysctl.conf
         echo 'net.core.wmem_max=33554432' | sudo tee -a /etc/sysctl.conf
         sudo sysctl -p || true
         
-        # XFCE config (disable all visual effects)
-        mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml
-        
-        cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'EOF'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <channel name="xfwm4" version="1.0">
-          <property name="general" type="empty">
-            <property name="use_compositing" type="bool" value="false"/>
-            <property name="show_frame_shadow" type="bool" value="false"/>
-            <property name="show_popup_shadow" type="bool" value="false"/>
-            <property name="snap_to_border" type="bool" value="true"/>
-            <property name="snap_to_windows" type="bool" value="true"/>
-            <property name="snap_width" type="int" value="10"/>
-            <property name="theme" type="string" value="Default"/>
-            <property name="title_font" type="string" value="Sans Bold 9"/>
-            <property name="double_click_action" type="string" value="maximize"/>
-            <property name="easy_click" type="string" value="Alt"/>
-            <property name="focus_mode" type="string" value="click"/>
-            <property name="placement_mode" type="string" value="center"/>
-            <property name="raise_delay" type="int" value="250"/>
-            <property name="resize_opacity" type="int" value="100"/>
-            <property name="move_opacity" type="int" value="100"/>
-            <property name="show_dock_shadow" type="bool" value="false"/>
-            <property name="workspace_count" type="int" value="1"/>
-          </property>
-        </channel>
+        # Configure LXDE for minimal resources
+        mkdir -p ~/.config/pcmanfm/LXDE
+        cat > ~/.config/pcmanfm/LXDE/desktop-items-0.conf << 'EOF'
+        [*]
+        desktop_bg=#000000
+        desktop_fg=#ffffff
+        desktop_shadow=#000000
+        show_thumbnails=false
+        show_hidden=false
+        desktop_font=Sans 10
         EOF
         
-        cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml << 'EOF'
+        # Disable openbox effects
+        mkdir -p ~/.config/openbox
+        cat > ~/.config/openbox/lxde-rc.xml << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
-        <channel name="xfce4-desktop" version="1.0">
-          <property name="desktop-icons" type="empty">
-            <property name="style" type="int" value="0"/>
-            <property name="file-icons" type="empty">
-              <property name="show-thumbnails" type="bool" value="false"/>
-            </property>
-          </property>
-          <property name="backdrop" type="empty">
-            <property name="screen0" type="empty">
-              <property name="monitor0" type="empty">
-                <property name="color-style" type="int" value="0"/>
-                <property name="image-style" type="int" value="0"/>
-              </property>
-            </property>
-          </property>
-        </channel>
+        <openbox_config xmlns="http://openbox.org/3.4/rc">
+          <resistance>
+            <strength>10</strength>
+            <screen_edge_strength>20</screen_edge_strength>
+          </resistance>
+          <focus>
+            <focusNew>yes</focusNew>
+            <followMouse>no</followMouse>
+            <focusLast>yes</focusLast>
+            <underMouse>no</underMouse>
+            <focusDelay>200</focusDelay>
+            <raiseOnFocus>no</raiseOnFocus>
+          </focus>
+          <placement>
+            <policy>Smart</policy>
+            <center>yes</center>
+            <monitor>Primary</monitor>
+          </placement>
+          <theme>
+            <name>Clearlooks</name>
+            <titleLayout>NLIMC</titleLayout>
+            <keepBorder>yes</keepBorder>
+            <animateIconify>no</animateIconify>
+            <font place="ActiveWindow">
+              <name>Sans</name>
+              <size>10</size>
+              <weight>Normal</weight>
+              <slant>Normal</slant>
+            </font>
+          </theme>
+          <desktops>
+            <number>1</number>
+            <firstdesk>1</firstdesk>
+            <names><name>Desktop</name></names>
+            <popupTime>0</popupTime>
+          </desktops>
+          <resize>
+            <drawContents>yes</drawContents>
+            <popupShow>Nonpixel</popupShow>
+            <popupPosition>Center</popupPosition>
+          </resize>
+          <applications />
+          <keyboard>
+            <chainQuitKey>C-g</chainQuitKey>
+          </keyboard>
+          <menu>
+            <file>menu.xml</file>
+            <hideDelay>200</hideDelay>
+            <middle>no</middle>
+            <submenuShowDelay>100</submenuShowDelay>
+            <applicationMenu>yes</applicationMenu>
+            <showIcons>yes</showIcons>
+          </menu>
+        </openbox_config>
         EOF
         
         # Firewall
         sudo ufw allow 3389/tcp || true
 
+    - name: Install Lightweight Browser
+      run: |
+        # Install Firefox for better performance in xRDP
+        sudo apt install -y firefox
+        # Disable HW accel in Firefox
+        echo 'user_pref("layers.acceleration.disabled", true);' >> ~/.mozilla/firefox/profile.default/prefs.js || true
+
     - name: Start Playit and Set Up RDP Tunnel
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
         playit --secret $PLAYIT_AUTH_KEY &
         sleep 10
         
         echo "RDP ready on port 3389"
         echo "Username: runner | Password: p@ssw0rd!"
-        echo "DE: XFCE4 Optimized + H.264 for animations"
-        echo "Tips: Use low res (1024x768), disable browser HW accel"
-        
+        echo "DE: LXDE (Ultra Lightweight, Optimized for Animations)"
+        echo "Tips: Use 1024x768, 15-bit color, Firefox with HW accel off"
+
     - name: Keep Alive
       run: |
         sleep 21600  # 6 hours
