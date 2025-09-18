@@ -18,16 +18,17 @@ jobs:
         sudo mv playit-linux-amd64 /usr/local/bin/playit
         sleep 5
 
-    - name: Install xRDP and LXDE with H.264 Support
+    - name: Install xRDP and LXDE with Minimal Config
       run: |
         sudo apt update
-        # Install xRDP, LXDE, and openh264 for animation performance
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp lxde lxde-common lxterminal openbox libopenh264-7
+        # Install minimal xRDP, LXDE, and H.264
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp lxde lxde-common lxterminal openbox libopenh264-7 xserver-xorg-core x11-xserver-utils
         
-        # Install xRDP dependencies and H.264 codec
-        sudo apt install -y xserver-xorg-core libx264-dev
+        # Create dummy X display
+        sudo Xvfb :10 -ac -screen 0 1024x768x16 &
+        echo "export DISPLAY=:10" >> ~/.bashrc
         
-        # Ensure xrdp.ini exists with optimal config
+        # Minimal xrdp.ini
         sudo bash -c 'cat > /etc/xrdp/xrdp.ini << EOF
         [Globals]
         ini_version=1
@@ -39,7 +40,6 @@ jobs:
         tcp_keepalive=yes
         tcp_send_buffer_bytes=8388608
         tcp_recv_buffer_bytes=8388608
-        EnableXDamage=true
         [xrdp1]
         name=sesman-X11rdp
         lib=libxrdp.so
@@ -50,7 +50,7 @@ jobs:
         code=20
         EOF'
         
-        # Configure sesman.ini
+        # Minimal sesman.ini
         sudo bash -c 'cat > /etc/xrdp/sesman.ini << EOF
         [Globals]
         ListenAddress=127.0.0.1
@@ -61,34 +61,42 @@ jobs:
         [Security]
         AllowRootLogin=true
         MaxLoginRetry=4
-        TerminalServerUsers=tsusers
-        TerminalServerAdmins=tsadmins
         [Sessions]
         X11DisplayOffset=10
         MaxSessions=1
         KillDisconnected=false
-        XServerbpp=15
         [Logging]
         LogFile=/var/log/xrdp-sesman.log
-        LogLevel=INFO
+        LogLevel=DEBUG
         EnableLog=true
         EOF'
         
         # Set LXDE session
         echo "startlxde" > ~/.xsession
+        sudo bash -c 'echo "startlxde" > /etc/xrdp/startwm.sh'
+        sudo chmod +x /etc/xrdp/startwm.sh
         
         # Add xrdp user to ssl-cert
         sudo adduser xrdp ssl-cert || true
         
         # Enable and start services
-        sudo systemctl enable xrdp xrdp-sesman
-        sudo systemctl restart xrdp xrdp-sesman
-        sudo systemctl start xrdp xrdp-sesman
+        sudo systemctl enable xrdp xrdp-sesman || true
+        sudo systemctl restart xrdp xrdp-sesman || true
+        sudo systemctl start xrdp xrdp-sesman || true
         
-        # Check status
-        sudo systemctl status xrdp --no-pager
-        sudo systemctl status xrdp-sesman --no-pager
-        
+        # Debug logs
+        echo "xRDP Status:"
+        sudo systemctl status xrdp --no-pager || true
+        echo "xRDP-Sesman Status:"
+        sudo systemctl status xrdp-sesman --no-pager || true
+        echo "Journalctl xRDP:"
+        sudo journalctl -xeu xrdp.service --no-pager || true
+        echo "Journalctl xRDP-Sesman:"
+        sudo journalctl -xeu xrdp-sesman.service --no-pager || true
+        echo "xRDP Logs:"
+        sudo cat /var/log/xrdp.log || true
+        sudo cat /var/log/xrdp-sesman.log || true
+
     - name: Set User Password
       run: |
         echo 'runner:p@ssw0rd!' | sudo chpasswd
@@ -107,7 +115,7 @@ jobs:
         # CPU to performance
         echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
         
-        # Network tweaks for animations
+        # Network tweaks
         echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
         echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
         echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
@@ -115,7 +123,7 @@ jobs:
         echo 'net.core.wmem_max=33554432' | sudo tee -a /etc/sysctl.conf
         sudo sysctl -p || true
         
-        # Configure LXDE for minimal resources
+        # Minimal LXDE config
         mkdir -p ~/.config/pcmanfm/LXDE
         cat > ~/.config/pcmanfm/LXDE/desktop-items-0.conf << 'EOF'
         [*]
@@ -127,63 +135,18 @@ jobs:
         desktop_font=Sans 10
         EOF
         
-        # Disable openbox effects
         mkdir -p ~/.config/openbox
         cat > ~/.config/openbox/lxde-rc.xml << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
         <openbox_config xmlns="http://openbox.org/3.4/rc">
-          <resistance>
-            <strength>10</strength>
-            <screen_edge_strength>20</screen_edge_strength>
-          </resistance>
-          <focus>
-            <focusNew>yes</focusNew>
-            <followMouse>no</followMouse>
-            <focusLast>yes</focusLast>
-            <underMouse>no</underMouse>
-            <focusDelay>200</focusDelay>
-            <raiseOnFocus>no</raiseOnFocus>
-          </focus>
-          <placement>
-            <policy>Smart</policy>
-            <center>yes</center>
-            <monitor>Primary</monitor>
-          </placement>
-          <theme>
-            <name>Clearlooks</name>
-            <titleLayout>NLIMC</titleLayout>
-            <keepBorder>yes</keepBorder>
-            <animateIconify>no</animateIconify>
-            <font place="ActiveWindow">
-              <name>Sans</name>
-              <size>10</size>
-              <weight>Normal</weight>
-              <slant>Normal</slant>
-            </font>
-          </theme>
-          <desktops>
-            <number>1</number>
-            <firstdesk>1</firstdesk>
-            <names><name>Desktop</name></names>
-            <popupTime>0</popupTime>
-          </desktops>
-          <resize>
-            <drawContents>yes</drawContents>
-            <popupShow>Nonpixel</popupShow>
-            <popupPosition>Center</popupPosition>
-          </resize>
-          <applications />
-          <keyboard>
-            <chainQuitKey>C-g</chainQuitKey>
-          </keyboard>
-          <menu>
-            <file>menu.xml</file>
-            <hideDelay>200</hideDelay>
-            <middle>no</middle>
-            <submenuShowDelay>100</submenuShowDelay>
-            <applicationMenu>yes</applicationMenu>
-            <showIcons>yes</showIcons>
-          </menu>
+          <resistance><strength>10</strength><screen_edge_strength>20</screen_edge_strength></resistance>
+          <focus><focusNew>yes</focusNew><followMouse>no</followMouse><focusLast>yes</focusLast><underMouse>no</underMouse><focusDelay>200</focusDelay><raiseOnFocus>no</raiseOnFocus></focus>
+          <placement><policy>Smart</policy><center>yes</center><monitor>Primary</monitor></placement>
+          <theme><name>Clearlooks</name><titleLayout>NLIMC</titleLayout><keepBorder>yes</keepBorder><animateIconify>no</animateIconify><font place="ActiveWindow"><name>Sans</name><size>10</size><weight>Normal</weight><slant>Normal</slant></font></theme>
+          <desktops><number>1</number><firstdesk>1</firstdesk><names><name>Desktop</name></names><popupTime>0</popupTime></desktops>
+          <resize><drawContents>yes</drawContents><popupShow>Nonpixel</popupShow><popupPosition>Center</popupPosition></resize>
+          <applications /><keyboard><chainQuitKey>C-g</chainQuitKey></keyboard>
+          <menu><file>menu.xml</file><hideDelay>200</hideDelay><middle>no</middle><submenuShowDelay>100</submenuShowDelay><applicationMenu>yes</applicationMenu><showIcons>yes</showIcons></menu>
         </openbox_config>
         EOF
         
@@ -192,9 +155,7 @@ jobs:
 
     - name: Install Lightweight Browser
       run: |
-        # Install Firefox for better performance in xRDP
         sudo apt install -y firefox
-        # Disable HW accel in Firefox
         echo 'user_pref("layers.acceleration.disabled", true);' >> ~/.mozilla/firefox/profile.default/prefs.js || true
 
     - name: Start Playit and Set Up RDP Tunnel
