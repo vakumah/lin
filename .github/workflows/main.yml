@@ -1,4 +1,4 @@
-name: Playit RDP Tunnel Linux (Openbox)
+name: Playit RDP Tunnel Linux (Openbox Optimized)
 
 on:
   workflow_dispatch:
@@ -29,13 +29,13 @@ jobs:
         # force use openbox session
         echo "openbox-session" > ~/.xsession
 
-        # basic openbox config
+        # openbox autostart
         mkdir -p ~/.config/openbox
         cat > ~/.config/openbox/autostart << 'EOF'
         # Start tint2 panel
         tint2 &
-        # File manager desktop
-        pcmanfm --desktop &
+        # File manager desktop (disable wallpaper for speed, solid black)
+        pcmanfm --desktop --wallpaper-mode=color --wallpaper=black &
         EOF
 
         # Performance tweaks xrdp
@@ -54,16 +54,35 @@ jobs:
         echo 'runner:p@ssw0rd!' | sudo chpasswd
         sudo usermod -aG sudo runner
 
+    - name: Advanced Performance Optimization
+      run: |
+        # Disable heavy services
+        sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
+        sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
+        sudo systemctl disable unattended-upgrades || true
+        sudo systemctl stop unattended-upgrades || true
+        sudo systemctl disable ModemManager || true
+        sudo systemctl stop ModemManager || true
+
+        # CPU governor performance
+        echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
+
+        # Network + memory tweaks
+        echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
+        echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
+        echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
+        sudo sysctl -p || true
+
     - name: Start Playit and Set Up RDP Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
       run: |
-        playit --secret $PLAYIT_AUTH_KEY & 
+        playit --secret $PLAYIT_AUTH_KEY &
         sleep 10
         echo "RDP is ready on port 3389"
         echo "Username: runner"
         echo "Password: p@ssw0rd!"
-        echo "Desktop: Openbox + Tint2 (ultra lightweight)"
+        echo "Desktop: Openbox + Tint2 (ultra lightweight, optimized)"
 
     - name: Keep the GitHub Action Runner Alive
       run: |
