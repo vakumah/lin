@@ -1,75 +1,44 @@
-name: Playit VNC Tunnel Linux Optimized
+name: Playit RDP Tunnel Linux
 
 on:
   workflow_dispatch:
 
 jobs:
-  setup-vnc-tunnel:
+  setup-rdp-tunnel:
     runs-on: ubuntu-latest
 
     steps:
     - name: Check out the repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v2
 
     - name: Download and Install Playit
       run: |
-        wget https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux-amd64
+        wget https://github.com/playit-cloud/playit-agent/releases/download/v0.16.0/playit-linux-amd64
         chmod +x playit-linux-amd64
         sudo mv playit-linux-amd64 /usr/local/bin/playit
         sleep 5
 
-    - name: Install TightVNC and LXDE
+    - name: Install and Configure xRDP with Performance Optimizations
       run: |
         sudo apt update
-        # Install TightVNC, LXDE, and minimal dependencies
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y tightvncserver lxde lxde-common lxterminal openbox x11-xserver-utils
-        
-        # Setup VNC password
-        mkdir -p ~/.vnc
-        echo "p@ssw0rd!" | vncpasswd -f > ~/.vnc/passwd
-        chmod 600 ~/.vnc/passwd
-        
-        # Start VNC server on display :1 (port 5901)
-        vncserver :1 -geometry 1024x768 -depth 16 -alwaysshared -localhost no -Ipl 0.0.0.0
-        
-        # Set LXDE session
-        echo "startlxde" > ~/.vnc/xstartup
-        chmod +x ~/.vnc/xstartup
-        
-        # Configure LXDE for minimal resources
-        mkdir -p ~/.config/pcmanfm/LXDE
-        cat > ~/.config/pcmanfm/LXDE/desktop-items-0.conf << 'EOF'
-        [*]
-        desktop_bg=#000000
-        desktop_fg=#ffffff
-        desktop_shadow=#000000
-        show_thumbnails=false
-        show_hidden=false
-        desktop_font=Sans 10
-        EOF
-        
-        mkdir -p ~/.config/openbox
-        cat > ~/.config/openbox/lxde-rc.xml << 'EOF'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <openbox_config xmlns="http://openbox.org/3.4/rc">
-          <resistance><strength>10</strength><screen_edge_strength>20</screen_edge_strength></resistance>
-          <focus><focusNew>yes</focusNew><followMouse>no</followMouse><focusLast>yes</focusLast><underMouse>no</underMouse><focusDelay>200</focusDelay><raiseOnFocus>no</raiseOnFocus></focus>
-          <placement><policy>Smart</policy><center>yes</center><monitor>Primary</monitor></placement>
-          <theme><name>Clearlooks</name><titleLayout>NLIMC</titleLayout><keepBorder>yes</keepBorder><animateIconify>no</animateIconify><font place="ActiveWindow"><name>Sans</name><size>10</size><weight>Normal</weight><slant>Normal</slant></font></theme>
-          <desktops><number>1</number><firstdesk>1</firstdesk><names><name>Desktop</name></names><popupTime>0</popupTime></desktops>
-          <resize><drawContents>yes</drawContents><popupShow>Nonpixel</popupShow><popupPosition>Center</popupPosition></resize>
-          <applications /><keyboard><chainQuitKey>C-g</chainQuitKey></keyboard>
-          <menu><file>menu.xml</file><hideDelay>200</hideDelay><middle>no</middle><submenuShowDelay>100</submenuShowDelay><applicationMenu>yes</applicationMenu><showIcons>yes</showIcons></menu>
-        </openbox_config>
-        EOF
-        
-        # Firewall
-        sudo ufw allow 5901/tcp || true
-        
-        # Debug VNC
-        echo "VNC Server Status:"
-        ps aux | grep vnc || true
-        cat ~/.vnc/*.log || true
+        # Install Openbox + JWM - lighter than XFCE4
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp openbox jwm obconf thunar firefox-esr
+        # Configure xrdp for maximum performance
+        sudo systemctl enable xrdp
+        # Set Openbox session
+        echo "openbox-session" > ~/.xsession
+        # Configure xrdp.ini for performance
+        sudo sed -i 's/max_bpp=32/max_bpp=16/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/#tcp_nodelay=1/tcp_nodelay=1/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/#tcp_keepalive=1/tcp_keepalive=1/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/crypt_level=high/crypt_level=low/' /etc/xrdp/xrdp.ini
+        echo 'initial_bpp=16' | sudo tee -a /etc/xrdp/xrdp.ini
+        # Add xrdp user to ssl-cert group
+        sudo adduser xrdp ssl-cert
+        # Start xrdp service
+        sudo systemctl start xrdp
+        # Check if service is running
+        sudo systemctl status xrdp --no-pager
 
     - name: Set User Password
       run: |
@@ -78,37 +47,79 @@ jobs:
 
     - name: Advanced Performance Optimization
       run: |
-        # Disable heavy services
+        # Disable heavy services and background processes
         sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
         sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
         sudo systemctl disable unattended-upgrades || true
         sudo systemctl stop unattended-upgrades || true
         sudo systemctl disable ModemManager || true
         sudo systemctl stop ModemManager || true
-        
-        # CPU to performance
+        # Set CPU governor to performance mode
         echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
-        
-        # Network tweaks for animations
+        # Advanced network optimizations
         echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
         echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
         echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.rmem_max=33554432' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.wmem_max=33554432' | sudo tee -a /etc/sysctl.conf
+        echo 'net.core.rmem_max=16777216' | sudo tee -a /etc/sysctl.conf
+        echo 'net.core.wmem_max=16777216' | sudo tee -a /etc/sysctl.conf
+        echo 'net.ipv4.tcp_rmem="4096 87380 16777216"' | sudo tee -a /etc/sysctl.conf
+        echo 'net.ipv4.tcp_wmem="4096 65536 16777216"' | sudo tee -a /etc/sysctl.conf
         sudo sysctl -p || true
+        # Configure Openbox for minimal performance
+        mkdir -p ~/.config/openbox
+        cat > ~/.config/openbox/menu.xml << 'EOF'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <openbox_menu>
+          <menu id="root-menu" label="Openbox">
+            <item label="Terminal"><action name="Execute"><command>jwm</command></action></item>
+            <item label="File Manager"><action name="Execute"><command>thunar</command></action></item>
+            <item label="Firefox"><action name="Execute"><command>firefox-esr</command></action></item>
+            <separator/>
+            <item label="Exit"><action name="Exit"/></item>
+          </menu>
+        </openbox_menu>
+        EOF
+        # Configure JWM for minimal UI
+        cat > ~/.jwmrc << 'EOF'
+        <?xml version="1.0"?>
+        <JWM>
+          <RootMenu onroot="3" height="24">
+            <Program label="Terminal">jwm</Program>
+            <Program label="File Manager">thunar</Program>
+            <Program label="Firefox">firefox-esr</Program>
+            <Exit label="Exit"/>
+          </RootMenu>
+          <WindowStyle>
+            <Font>Sans-9</Font>
+            <Width>4</Width>
+            <Height>24</Height>
+          </WindowStyle>
+          <TaskListStyle>
+            <Font>Sans-9</Font>
+            <MaxWidth>256</MaxWidth>
+          </TaskListStyle>
+          <TrayStyle>
+            <Font>Sans-9</Font>
+          </TrayStyle>
+        </JWM>
+        EOF
+        # Configure firewall
+        sudo ufw allow 3389/tcp || true
 
-    - name: Start Playit and Set Up VNC Tunnel
+    - name: Start Playit and Set Up RDP Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        playit --secret $PLAYIT_AUTH_KEY &
-        sleep 15
-        
-        echo "VNC ready on port 5901"
-        echo "Username: runner | Password: p@ssw0rd!"
-        echo "DE: LXDE (Ultra Lightweight, Optimized for Animations)"
-        echo "Tips: Use 1024x768, 16-bit color, VNC client (TightVNC/Remmina). Set tunnel to port 5901 in playit.gg dashboard."
+        playit --secret $PLAYIT_AUTH_KEY --datacenter=asia --keep-alive &
+        sleep 10
+        # Show connection info
+        echo "RDP is ready on port 3389"
+        echo "Username: runner"
+        echo "Password: p@ssw0rd!"
+        echo "Desktop Environment: Openbox (Ultra-light, Optimized for RDP)"
+        echo "Optimizations: 16-bit color, large TCP buffers, ad-block ready"
+        echo "Browser: Firefox ESR (install uBlock Origin for ad-blocking)"
 
-    - name: Keep Alive
+    - name: Keep the GitHub Action Runner Alive
       run: |
         sleep 21600  # 6 hours
