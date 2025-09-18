@@ -1,10 +1,10 @@
-name: Playit RDP Tunnel Linux Optimized
+name: Playit VNC Tunnel Linux Optimized
 
 on:
   workflow_dispatch:
 
 jobs:
-  setup-rdp-tunnel:
+  setup-vnc-tunnel:
     runs-on: ubuntu-latest
 
     steps:
@@ -18,112 +18,25 @@ jobs:
         sudo mv playit-linux-amd64 /usr/local/bin/playit
         sleep 5
 
-    - name: Install xRDP and LXDE with Minimal Config
+    - name: Install TightVNC and LXDE
       run: |
         sudo apt update
-        # Install minimal xRDP, LXDE, and H.264
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp lxde lxde-common lxterminal openbox libopenh264-7 xserver-xorg-core x11-xserver-utils
+        # Install TightVNC, LXDE, and lightweight dependencies
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y tightvncserver lxde lxde-common lxterminal openbox x11-xserver-utils
         
-        # Create dummy X display
-        sudo Xvfb :10 -ac -screen 0 1024x768x16 &
-        echo "export DISPLAY=:10" >> ~/.bashrc
+        # Setup VNC password
+        mkdir -p ~/.vnc
+        echo "p@ssw0rd!" | vncpasswd -f > ~/.vnc/passwd
+        chmod 600 ~/.vnc/passwd
         
-        # Minimal xrdp.ini
-        sudo bash -c 'cat > /etc/xrdp/xrdp.ini << EOF
-        [Globals]
-        ini_version=1
-        port=3389
-        use_compression=yes
-        crypt_level=none
-        max_bpp=15
-        tcp_nodelay=yes
-        tcp_keepalive=yes
-        tcp_send_buffer_bytes=8388608
-        tcp_recv_buffer_bytes=8388608
-        [xrdp1]
-        name=sesman-X11rdp
-        lib=libxrdp.so
-        username=ask
-        password=ask
-        ip=127.0.0.1
-        port=-1
-        code=20
-        EOF'
-        
-        # Minimal sesman.ini
-        sudo bash -c 'cat > /etc/xrdp/sesman.ini << EOF
-        [Globals]
-        ListenAddress=127.0.0.1
-        ListenPort=3350
-        EnableUserWindowManager=true
-        UserWindowManager=startlxde
-        DefaultWindowManager=startlxde
-        [Security]
-        AllowRootLogin=true
-        MaxLoginRetry=4
-        [Sessions]
-        X11DisplayOffset=10
-        MaxSessions=1
-        KillDisconnected=false
-        [Logging]
-        LogFile=/var/log/xrdp-sesman.log
-        LogLevel=DEBUG
-        EnableLog=true
-        EOF'
+        # Start VNC server on display :1 (port 5901)
+        vncserver :1 -geometry 1024x768 -depth 16 -alwaysshared
         
         # Set LXDE session
-        echo "startlxde" > ~/.xsession
-        sudo bash -c 'echo "startlxde" > /etc/xrdp/startwm.sh'
-        sudo chmod +x /etc/xrdp/startwm.sh
+        echo "startlxde" > ~/.vnc/xstartup
+        chmod +x ~/.vnc/xstartup
         
-        # Add xrdp user to ssl-cert
-        sudo adduser xrdp ssl-cert || true
-        
-        # Enable and start services
-        sudo systemctl enable xrdp xrdp-sesman || true
-        sudo systemctl restart xrdp xrdp-sesman || true
-        sudo systemctl start xrdp xrdp-sesman || true
-        
-        # Debug logs
-        echo "xRDP Status:"
-        sudo systemctl status xrdp --no-pager || true
-        echo "xRDP-Sesman Status:"
-        sudo systemctl status xrdp-sesman --no-pager || true
-        echo "Journalctl xRDP:"
-        sudo journalctl -xeu xrdp.service --no-pager || true
-        echo "Journalctl xRDP-Sesman:"
-        sudo journalctl -xeu xrdp-sesman.service --no-pager || true
-        echo "xRDP Logs:"
-        sudo cat /var/log/xrdp.log || true
-        sudo cat /var/log/xrdp-sesman.log || true
-
-    - name: Set User Password
-      run: |
-        echo 'runner:p@ssw0rd!' | sudo chpasswd
-        sudo usermod -aG sudo runner
-
-    - name: Advanced Performance Optimization
-      run: |
-        # Disable heavy services
-        sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
-        sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
-        sudo systemctl disable unattended-upgrades || true
-        sudo systemctl stop unattended-upgrades || true
-        sudo systemctl disable ModemManager || true
-        sudo systemctl stop ModemManager || true
-        
-        # CPU to performance
-        echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
-        
-        # Network tweaks
-        echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
-        echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
-        echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.rmem_max=33554432' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.wmem_max=33554432' | sudo tee -a /etc/sysctl.conf
-        sudo sysctl -p || true
-        
-        # Minimal LXDE config
+        # Configure LXDE for minimal resources
         mkdir -p ~/.config/pcmanfm/LXDE
         cat > ~/.config/pcmanfm/LXDE/desktop-items-0.conf << 'EOF'
         [*]
@@ -151,24 +64,50 @@ jobs:
         EOF
         
         # Firewall
-        sudo ufw allow 3389/tcp || true
+        sudo ufw allow 5901/tcp || true
+
+    - name: Set User Password
+      run: |
+        echo 'runner:p@ssw0rd!' | sudo chpasswd
+        sudo usermod -aG sudo runner
+
+    - name: Advanced Performance Optimization
+      run: |
+        # Disable heavy services
+        sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
+        sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
+        sudo systemctl disable unattended-upgrades || true
+        sudo systemctl stop unattended-upgrades || true
+        sudo systemctl disable ModemManager || true
+        sudo systemctl stop ModemManager || true
+        
+        # CPU to performance
+        echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
+        
+        # Network tweaks for animations
+        echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
+        echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
+        echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
+        echo 'net.core.rmem_max=33554432' | sudo tee -a /etc/sysctl.conf
+        echo 'net.core.wmem_max=33554432' | sudo tee -a /etc/sysctl.conf
+        sudo sysctl -p || true
 
     - name: Install Lightweight Browser
       run: |
         sudo apt install -y firefox
         echo 'user_pref("layers.acceleration.disabled", true);' >> ~/.mozilla/firefox/profile.default/prefs.js || true
 
-    - name: Start Playit and Set Up RDP Tunnel
+    - name: Start Playit and Set Up VNC Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        playit --secret $PLAYIT_AUTH_KEY &
+        playit --secret $PLAYIT_AUTH_KEY --port 5901 &
         sleep 10
         
-        echo "RDP ready on port 3389"
+        echo "VNC ready on port 5901"
         echo "Username: runner | Password: p@ssw0rd!"
         echo "DE: LXDE (Ultra Lightweight, Optimized for Animations)"
-        echo "Tips: Use 1024x768, 15-bit color, Firefox with HW accel off"
+        echo "Tips: Use 1024x768, 16-bit color, VNC client (TightVNC/Remmina), Firefox with HW accel off"
 
     - name: Keep Alive
       run: |
