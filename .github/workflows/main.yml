@@ -1,4 +1,4 @@
-name: Playit RDP Tunnel Linux
+name: Playit RDP Tunnel Linux Optimized
 
 on:
   workflow_dispatch:
@@ -18,42 +18,31 @@ jobs:
         sudo mv playit-linux-amd64 /usr/local/bin/playit
         sleep 5
 
-    - name: Install and Configure xRDP with Performance Optimizations
+    - name: Install xRDP with H.264 and Performance Script
       run: |
         sudo apt update
-        # Install XFCE4 and xRDP, no xorgxrdp-glamor
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp xfce4 xfce4-terminal thunar xserver-xorg-core
+        # Download and run xRDP installer script v1.5.4 with H.264 for better animation/video
+        cd /tmp
+        wget https://www.c-nergy.be/downloads/xRDP/xrdp-installer-1.5.4.zip
+        unzip xrdp-installer-1.5.4.zip
+        chmod +x xrdp-installer-1.5.4.sh
+        sudo ./xrdp-installer-1.5.4.sh -e  # -e for H.264 encoding
         
-        # Configure xrdp for maximum performance
-        sudo systemctl enable xrdp
+        # Install lightweight DE: XFCE (better than GNOME for xRDP)
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-terminal thunar
         
-        # Set XFCE4 session
+        # Set XFCE session
         echo "xfce4-session" > ~/.xsession
         
-        # Configure xrdp.ini for performance
-        sudo sed -i 's/max_bpp=32/max_bpp=15/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/#tcp_nodelay=1/tcp_nodelay=1/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/#tcp_keepalive=1/tcp_keepalive=1/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/crypt_level=high/crypt_level=low/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/#use_compression=1/use_compression=1/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/tcp_send_buffer_bytes=32768/tcp_send_buffer_bytes=8388608/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/tcp_recv_buffer_bytes=32768/tcp_recv_buffer_bytes=8388608/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/EnableXDamage=false/EnableXDamage=true/' /etc/xrdp/xrdp.ini
+        # Additional tweaks post-installer (for max perf)
+        sudo sed -i 's/crypt_level=low/crypt_level=None/' /etc/xrdp/xrdp.ini  # No encryption for speed
+        sudo sed -i 's/max_bpp=16/max_bpp=15/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/XServerbpp=16/XServerbpp=15/' /etc/xrdp/sesman.ini
         
-        # Configure sesman.ini for performance
-        sudo sed -i 's/UseVSocket=false/UseVSocket=true/' /etc/xrdp/sesman.ini
-        sudo sed -i 's/Policy=UBDC/Policy=UBDI/' /etc/xrdp/sesman.ini
-        sudo sed -i 's/MaxSessions=10/MaxSessions=1/' /etc/xrdp/sesman.ini
-        sudo sed -i 's/XServerbpp=24/XServerbpp=15/' /etc/xrdp/sesman.ini
+        # Restart services
+        sudo systemctl restart xrdp xrdp-sesman
         
-        # Add xrdp user to ssl-cert group
-        sudo adduser xrdp ssl-cert
-        
-        # Restart xrdp to apply configs
-        sudo systemctl restart xrdp
-        sudo systemctl start xrdp
-        
-        # Check if service is running
+        # Check status
         sudo systemctl status xrdp --no-pager
         
     - name: Set User Password
@@ -71,21 +60,20 @@ jobs:
         sudo systemctl disable ModemManager || true
         sudo systemctl stop ModemManager || true
         
-        # Set CPU governor to performance
+        # CPU to performance
         echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
         
-        # Network optimizations
+        # Network tweaks (bigger buffers for animation data)
         echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
         echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
         echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.rmem_max=16777216' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.wmem_max=16777216' | sudo tee -a /etc/sysctl.conf
+        echo 'net.core.rmem_max=33554432' | sudo tee -a /etc/sysctl.conf  # 32MB for smoother streaming
+        echo 'net.core.wmem_max=33554432' | sudo tee -a /etc/sysctl.conf
         sudo sysctl -p || true
         
-        # Configure XFCE4 for performance
+        # XFCE config (disable all visual effects)
         mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml
         
-        # Disable compositor
         cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
         <channel name="xfwm4" version="1.0">
@@ -111,7 +99,6 @@ jobs:
         </channel>
         EOF
         
-        # Configure desktop
         cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
         <channel name="xfce4-desktop" version="1.0">
@@ -132,7 +119,7 @@ jobs:
         </channel>
         EOF
         
-        # Configure firewall
+        # Firewall
         sudo ufw allow 3389/tcp || true
 
     - name: Start Playit and Set Up RDP Tunnel
@@ -142,13 +129,11 @@ jobs:
         playit --secret $PLAYIT_AUTH_KEY &
         sleep 10
         
-        # Show connection info
-        echo "RDP is ready on port 3389"
-        echo "Username: runner"
-        echo "Password: p@ssw0rd!"
-        echo "Desktop Environment: XFCE4 (Full Window Controls & Performance Optimized)"
-        echo "Optimizations: Very low color depth (15-bit), high compression, large TCP buffers, minimal UI"
+        echo "RDP ready on port 3389"
+        echo "Username: runner | Password: p@ssw0rd!"
+        echo "DE: XFCE4 Optimized + H.264 for animations"
+        echo "Tips: Use low res (1024x768), disable browser HW accel"
         
-    - name: Keep the GitHub Action Runner Alive
+    - name: Keep Alive
       run: |
-        sleep 21600  # 6 hours for public repo
+        sleep 21600  # 6 hours
