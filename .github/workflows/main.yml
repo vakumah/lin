@@ -21,14 +21,21 @@ jobs:
     - name: Install and Configure xRDP + LXQt (Lightweight DE)
       run: |
         sudo apt update
-        # Install xRDP and LXQt (lighter than XFCE)
+        # Install xRDP and LXQt with Openbox
         sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp lxqt-core lxqt-session openbox lxterminal
         
         # Enable xRDP service
         sudo systemctl enable xrdp
         
-        # Set LXQt as default session
+        # Set LXQt session as default
         echo "lxqt-session" > ~/.xsession
+
+        # Force LXQt to use Openbox (avoid pop-up window manager selection)
+        mkdir -p ~/.config/lxqt
+        cat > ~/.config/lxqt/session.conf << 'EOF'
+        [General]
+        window_manager=openbox
+        EOF
         
         # Configure xrdp.ini for performance
         sudo sed -i 's/max_bpp=32/max_bpp=16/' /etc/xrdp/xrdp.ini
