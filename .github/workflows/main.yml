@@ -1,4 +1,4 @@
-name: Playit RDP Tunnel Linux
+name: Playit RDP Tunnel Linux Optimized
 
 on:
   workflow_dispatch:
@@ -8,36 +8,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Check out the repository
+    - name: Checkout repository
       uses: actions/checkout@v2
 
     - name: Download and Install Playit
       run: |
-        wget https://github.com/playit-cloud/playit-agent/releases/download/v0.16.0/playit-linux-amd64
+        wget https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64
         chmod +x playit-linux-amd64
         sudo mv playit-linux-amd64 /usr/local/bin/playit
         sleep 5
 
-    - name: Install and Configure xRDP with Performance Optimizations
+    - name: Install and Configure xRDP + LXQt (Lightweight DE)
       run: |
         sudo apt update
-        # Install Openbox + JWM - lighter than XFCE4
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp openbox jwm obconf thunar firefox-esr
-        # Configure xrdp for maximum performance
+        # Install xRDP and LXQt (lighter than XFCE)
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp lxqt-core lxqt-session openbox lxterminal
+        
+        # Enable xRDP service
         sudo systemctl enable xrdp
-        # Set Openbox session
-        echo "openbox-session" > ~/.xsession
+        
+        # Set LXQt as default session
+        echo "lxqt-session" > ~/.xsession
+        
         # Configure xrdp.ini for performance
         sudo sed -i 's/max_bpp=32/max_bpp=16/' /etc/xrdp/xrdp.ini
         sudo sed -i 's/#tcp_nodelay=1/tcp_nodelay=1/' /etc/xrdp/xrdp.ini
         sudo sed -i 's/#tcp_keepalive=1/tcp_keepalive=1/' /etc/xrdp/xrdp.ini
         sudo sed -i 's/crypt_level=high/crypt_level=low/' /etc/xrdp/xrdp.ini
-        echo 'initial_bpp=16' | sudo tee -a /etc/xrdp/xrdp.ini
+        
         # Add xrdp user to ssl-cert group
         sudo adduser xrdp ssl-cert
-        # Start xrdp service
+        
+        # Start xrdp
         sudo systemctl start xrdp
-        # Check if service is running
         sudo systemctl status xrdp --no-pager
 
     - name: Set User Password
@@ -45,81 +48,49 @@ jobs:
         echo 'runner:p@ssw0rd!' | sudo chpasswd
         sudo usermod -aG sudo runner
 
-    - name: Advanced Performance Optimization
+    - name: Extra Performance Optimizations
       run: |
-        # Disable heavy services and background processes
+        # Disable heavy services
         sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
         sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
         sudo systemctl disable unattended-upgrades || true
         sudo systemctl stop unattended-upgrades || true
         sudo systemctl disable ModemManager || true
         sudo systemctl stop ModemManager || true
-        # Set CPU governor to performance mode
+
+        # Kill pulseaudio (no sound = faster)
+        systemctl --user stop pulseaudio.socket || true
+        systemctl --user stop pulseaudio.service || true
+
+        # CPU governor performance
         echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
-        # Advanced network optimizations
+
+        # Network tweaks
         echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
         echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
         echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.rmem_max=16777216' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.wmem_max=16777216' | sudo tee -a /etc/sysctl.conf
-        echo 'net.ipv4.tcp_rmem="4096 87380 16777216"' | sudo tee -a /etc/sysctl.conf
-        echo 'net.ipv4.tcp_wmem="4096 65536 16777216"' | sudo tee -a /etc/sysctl.conf
         sudo sysctl -p || true
-        # Configure Openbox for minimal performance
-        mkdir -p ~/.config/openbox
-        cat > ~/.config/openbox/menu.xml << 'EOF'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <openbox_menu>
-          <menu id="root-menu" label="Openbox">
-            <item label="Terminal"><action name="Execute"><command>jwm</command></action></item>
-            <item label="File Manager"><action name="Execute"><command>thunar</command></action></item>
-            <item label="Firefox"><action name="Execute"><command>firefox-esr</command></action></item>
-            <separator/>
-            <item label="Exit"><action name="Exit"/></item>
-          </menu>
-        </openbox_menu>
-        EOF
-        # Configure JWM for minimal UI
-        cat > ~/.jwmrc << 'EOF'
-        <?xml version="1.0"?>
-        <JWM>
-          <RootMenu onroot="3" height="24">
-            <Program label="Terminal">jwm</Program>
-            <Program label="File Manager">thunar</Program>
-            <Program label="Firefox">firefox-esr</Program>
-            <Exit label="Exit"/>
-          </RootMenu>
-          <WindowStyle>
-            <Font>Sans-9</Font>
-            <Width>4</Width>
-            <Height>24</Height>
-          </WindowStyle>
-          <TaskListStyle>
-            <Font>Sans-9</Font>
-            <MaxWidth>256</MaxWidth>
-          </TaskListStyle>
-          <TrayStyle>
-            <Font>Sans-9</Font>
-          </TrayStyle>
-        </JWM>
-        EOF
-        # Configure firewall
+
+        # Open firewall for RDP
         sudo ufw allow 3389/tcp || true
 
-    - name: Start Playit and Set Up RDP Tunnel
+    - name: Start Playit Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        playit --secret $PLAYIT_AUTH_KEY --datacenter=asia --keep-alive &
+        playit --secret $PLAYIT_AUTH_KEY &
         sleep 10
-        # Show connection info
-        echo "RDP is ready on port 3389"
+        
+        echo "======================================"
+        echo "✅ RDP is ready!"
+        echo "Server: via Playit tunnel"
+        echo "Port: 3389"
         echo "Username: runner"
         echo "Password: p@ssw0rd!"
-        echo "Desktop Environment: Openbox (Ultra-light, Optimized for RDP)"
-        echo "Optimizations: 16-bit color, large TCP buffers, ad-block ready"
-        echo "Browser: Firefox ESR (install uBlock Origin for ad-blocking)"
+        echo "Desktop: LXQt + Openbox (lightweight)"
+        echo "Optimizations: 16-bit color, no compositor, no audio"
+        echo "======================================"
 
-    - name: Keep the GitHub Action Runner Alive
+    - name: Keep Runner Alive
       run: |
         sleep 21600  # 6 hours
