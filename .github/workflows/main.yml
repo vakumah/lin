@@ -21,7 +21,7 @@ jobs:
     - name: Install TightVNC and LXDE
       run: |
         sudo apt update
-        # Install TightVNC, LXDE, and lightweight dependencies
+        # Install TightVNC, LXDE, and minimal dependencies
         sudo DEBIAN_FRONTEND=noninteractive apt install -y tightvncserver lxde lxde-common lxterminal openbox x11-xserver-utils
         
         # Setup VNC password
@@ -92,11 +92,6 @@ jobs:
         echo 'net.core.wmem_max=33554432' | sudo tee -a /etc/sysctl.conf
         sudo sysctl -p || true
 
-    - name: Install Lightweight Browser
-      run: |
-        sudo apt install -y firefox
-        echo 'user_pref("layers.acceleration.disabled", true);' >> ~/.mozilla/firefox/profile.default/prefs.js || true
-
     - name: Start Playit and Set Up VNC Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
@@ -107,7 +102,7 @@ jobs:
         echo "VNC ready on port 5901"
         echo "Username: runner | Password: p@ssw0rd!"
         echo "DE: LXDE (Ultra Lightweight, Optimized for Animations)"
-        echo "Tips: Use 1024x768, 16-bit color, VNC client (TightVNC/Remmina), Firefox with HW accel off"
+        echo "Tips: Use 1024x768, 16-bit color, VNC client (TightVNC/Remmina), install browser manually if needed"
 
     - name: Keep Alive
       run: |
