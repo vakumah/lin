@@ -30,7 +30,7 @@ jobs:
         chmod 600 ~/.vnc/passwd
         
         # Start VNC server on display :1 (port 5901)
-        vncserver :1 -geometry 1024x768 -depth 16 -alwaysshared
+        vncserver :1 -geometry 1024x768 -depth 16 -alwaysshared -localhost no -Ipl 0.0.0.0
         
         # Set LXDE session
         echo "startlxde" > ~/.vnc/xstartup
@@ -65,6 +65,11 @@ jobs:
         
         # Firewall
         sudo ufw allow 5901/tcp || true
+        
+        # Debug VNC
+        echo "VNC Server Status:"
+        ps aux | grep vnc || true
+        cat ~/.vnc/*.log || true
 
     - name: Set User Password
       run: |
@@ -96,13 +101,13 @@ jobs:
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        playit --secret $PLAYIT_AUTH_KEY --port 5901 &
-        sleep 10
+        playit --secret $PLAYIT_AUTH_KEY &
+        sleep 15
         
         echo "VNC ready on port 5901"
         echo "Username: runner | Password: p@ssw0rd!"
         echo "DE: LXDE (Ultra Lightweight, Optimized for Animations)"
-        echo "Tips: Use 1024x768, 16-bit color, VNC client (TightVNC/Remmina), install browser manually if needed"
+        echo "Tips: Use 1024x768, 16-bit color, VNC client (TightVNC/Remmina). Set tunnel to port 5901 in playit.gg dashboard."
 
     - name: Keep Alive
       run: |
