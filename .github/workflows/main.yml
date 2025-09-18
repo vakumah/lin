@@ -9,7 +9,7 @@ jobs:
 
     steps:
     - name: Check out the repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Download and Install Playit
       run: |
@@ -21,35 +21,35 @@ jobs:
     - name: Install and Configure xRDP with Performance Optimizations
       run: |
         sudo apt update
-        # Install XFCE4 - better window management than LXDE
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp xfce4 xfce4-terminal thunar xorgxrdp-glamor
+        # Install XFCE4 and xRDP, no xorgxrdp-glamor
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp xfce4 xfce4-terminal thunar xserver-xorg-core
         
         # Configure xrdp for maximum performance
         sudo systemctl enable xrdp
         
-        # Set XFCE4 session with proper window manager
+        # Set XFCE4 session
         echo "xfce4-session" > ~/.xsession
         
         # Configure xrdp.ini for performance
-        sudo sed -i 's/max_bpp=32/max_bpp=16/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/max_bpp=32/max_bpp=15/' /etc/xrdp/xrdp.ini
         sudo sed -i 's/#tcp_nodelay=1/tcp_nodelay=1/' /etc/xrdp/xrdp.ini
         sudo sed -i 's/#tcp_keepalive=1/tcp_keepalive=1/' /etc/xrdp/xrdp.ini
         sudo sed -i 's/crypt_level=high/crypt_level=low/' /etc/xrdp/xrdp.ini
         sudo sed -i 's/#use_compression=1/use_compression=1/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/tcp_send_buffer_bytes=32768/tcp_send_buffer_bytes=4194304/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/tcp_recv_buffer_bytes=32768/tcp_recv_buffer_bytes=4194304/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/tcp_send_buffer_bytes=32768/tcp_send_buffer_bytes=8388608/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/tcp_recv_buffer_bytes=32768/tcp_recv_buffer_bytes=8388608/' /etc/xrdp/xrdp.ini
         sudo sed -i 's/EnableXDamage=false/EnableXDamage=true/' /etc/xrdp/xrdp.ini
         
         # Configure sesman.ini for performance
         sudo sed -i 's/UseVSocket=false/UseVSocket=true/' /etc/xrdp/sesman.ini
         sudo sed -i 's/Policy=UBDC/Policy=UBDI/' /etc/xrdp/sesman.ini
         sudo sed -i 's/MaxSessions=10/MaxSessions=1/' /etc/xrdp/sesman.ini
-        sudo sed -i 's/XServerbpp=24/XServerbpp=16/' /etc/xrdp/sesman.ini
+        sudo sed -i 's/XServerbpp=24/XServerbpp=15/' /etc/xrdp/sesman.ini
         
         # Add xrdp user to ssl-cert group
         sudo adduser xrdp ssl-cert
         
-        # Start xrdp service
+        # Restart xrdp to apply configs
         sudo systemctl restart xrdp
         sudo systemctl start xrdp
         
@@ -63,7 +63,7 @@ jobs:
 
     - name: Advanced Performance Optimization
       run: |
-        # Disable heavy services and background processes
+        # Disable heavy services
         sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
         sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
         sudo systemctl disable unattended-upgrades || true
@@ -71,21 +71,21 @@ jobs:
         sudo systemctl disable ModemManager || true
         sudo systemctl stop ModemManager || true
         
-        # Set CPU governor to performance mode
+        # Set CPU governor to performance
         echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
         
-        # Advanced network optimizations
+        # Network optimizations
         echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
         echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
         echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.rmem_max=8388608' | sudo tee -a /etc/sysctl.conf
-        echo 'net.core.wmem_max=8388608' | sudo tee -a /etc/sysctl.conf
+        echo 'net.core.rmem_max=16777216' | sudo tee -a /etc/sysctl.conf
+        echo 'net.core.wmem_max=16777216' | sudo tee -a /etc/sysctl.conf
         sudo sysctl -p || true
         
-        # Configure XFCE4 for better performance
+        # Configure XFCE4 for performance
         mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml
         
-        # Disable compositor for better performance
+        # Disable compositor
         cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
         <channel name="xfwm4" version="1.0">
@@ -111,7 +111,7 @@ jobs:
         </channel>
         EOF
         
-        # Configure desktop for performance
+        # Configure desktop
         cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
         <channel name="xfce4-desktop" version="1.0">
@@ -147,8 +147,8 @@ jobs:
         echo "Username: runner"
         echo "Password: p@ssw0rd!"
         echo "Desktop Environment: XFCE4 (Full Window Controls & Performance Optimized)"
-        echo "Optimizations: Low color depth, fast compression, minimal UI"
+        echo "Optimizations: Very low color depth (15-bit), high compression, large TCP buffers, minimal UI"
         
     - name: Keep the GitHub Action Runner Alive
       run: |
-        sleep 21600  # 6 hours for public repo with no minute limit
+        sleep 21600  # 6 hours for public repo
