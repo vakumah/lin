@@ -1,89 +1,59 @@
-name: Playit RDP Tunnel Linux (Openbox Optimized)
+name: Playit RDP Tunnel (Windows Optimized)
 
 on:
   workflow_dispatch:
 
 jobs:
   setup-rdp-tunnel:
-    runs-on: ubuntu-latest
+    runs-on: windows-2025
 
     steps:
-    - name: Check out the repository
+    - name: Checkout Repository
       uses: actions/checkout@v2
 
-    - name: Download and Install Playit
+    - name: Download & Install Playit
       run: |
-        wget https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64
-        chmod +x playit-linux-amd64
-        sudo mv playit-linux-amd64 /usr/local/bin/playit
-        sleep 5
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        Start-Sleep -Seconds 5
 
-    - name: Install and Configure xRDP + Openbox
+    - name: Enable RDP
       run: |
-        sudo apt update
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp openbox obconf tint2 lxterminal pcmanfm
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MinEncryptionLevel" -Value 3
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
-        # enable xrdp
-        sudo systemctl enable xrdp
-
-        # force use openbox session
-        echo "openbox-session" > ~/.xsession
-
-        # openbox autostart
-        mkdir -p ~/.config/openbox
-        cat > ~/.config/openbox/autostart << 'EOF'
-        # Start tint2 panel
-        tint2 &
-        # File manager desktop (disable wallpaper for speed, solid black)
-        pcmanfm --desktop --wallpaper-mode=color --wallpaper=black &
-        EOF
-
-        # Performance tweaks xrdp
-        sudo sed -i 's/max_bpp=32/max_bpp=16/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/#tcp_nodelay=1/tcp_nodelay=1/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/#tcp_keepalive=1/tcp_keepalive=1/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/crypt_level=high/crypt_level=low/' /etc/xrdp/xrdp.ini
-
-        # Add xrdp user to ssl-cert group
-        sudo adduser xrdp ssl-cert
-
-        sudo systemctl restart xrdp
-
-    - name: Set User Password
+    - name: Optimize Windows for RDP
       run: |
-        echo 'runner:p@ssw0rd!' | sudo chpasswd
-        sudo usermod -aG sudo runner
+        # Disable services that eat resources
+        $services = "WSearch","SysMain","DiagTrack","dmwappushservice","RetailDemo","Fax","wuauserv","BITS","Spooler"
+        foreach ($svc in $services) {
+          Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+          Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+        }
+        # Visual effects -> performance
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'UserPreferencesMask' -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00))
+        # Network tweaks
+        Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'MaxUserPort' -Value 65534
+        Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'TcpTimedWaitDelay' -Value 30
+        # Power mode High Performance
+        powercfg /setactive SCHEME_MIN
+        # Check RDP service
+        Start-Service TermService
+        Set-Service TermService -StartupType Automatic
 
-    - name: Advanced Performance Optimization
-      run: |
-        # Disable heavy services
-        sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
-        sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
-        sudo systemctl disable unattended-upgrades || true
-        sudo systemctl stop unattended-upgrades || true
-        sudo systemctl disable ModemManager || true
-        sudo systemctl stop ModemManager || true
-
-        # CPU governor performance
-        echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
-
-        # Network + memory tweaks
-        echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
-        echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
-        echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
-        sudo sysctl -p || true
-
-    - name: Start Playit and Set Up RDP Tunnel
+    - name: Start Playit Tunnel (Background)
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        playit --secret $PLAYIT_AUTH_KEY &
-        sleep 10
-        echo "RDP is ready on port 3389"
-        echo "Username: runner"
-        echo "Password: p@ssw0rd!"
-        echo "Desktop: Openbox + Tint2 (ultra lightweight, optimized)"
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
+        Start-Sleep -Seconds 10
+        Get-Process playit
 
-    - name: Keep the GitHub Action Runner Alive
+    - name: Keep GitHub Runner Alive
       run: |
-        sleep 21600
+        Write-Output "RDP + Playit is running... Keep Alive enabled."
+        while ($true) {
+          Start-Sleep -Seconds 300
+        }
