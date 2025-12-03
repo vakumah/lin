@@ -24,6 +24,7 @@ jobs:
         sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp xfce4 xfce4-goodies xfce4-terminal thunar firefox gedit wget curl git dbus-x11 --no-install-recommends
 
         # CRITICAL: Configure polkit to allow xrdp users
+        sudo mkdir -p /etc/polkit-1/localauthority/50-local.d
         sudo bash -c 'cat > /etc/polkit-1/localauthority/50-local.d/45-allow-colord.pkla' << 'POLKIT'
         [Allow Colord all Users]
         Identity=unix-user:*
