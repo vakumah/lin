@@ -52,7 +52,7 @@ jobs:
         XFCONF
 
         # Start VNC server
-        vncserver :1 -geometry 1920x1080 -depth 24 -localhost no
+        vncserver :1 -geometry 1920x1080 -depth 24
         
         echo "VNC Server started on display :1"
         echo "VNC Password: p@ssw0rd!"
@@ -123,14 +123,14 @@ jobs:
               echo "Memory usage high ($MEM_USAGE%), restarting VNC..."
               vncserver -kill :1
               sleep 2
-              vncserver :1 -geometry 1920x1080 -depth 24 -localhost no
+              vncserver :1 -geometry 1920x1080 -depth 24
               sleep 5
             fi
             
             # Check if VNC is responsive
             if ! pgrep -x "Xtightvnc" > /dev/null; then
               echo "VNC not running, restarting..."
-              vncserver :1 -geometry 1920x1080 -depth 24 -localhost no
+              vncserver :1 -geometry 1920x1080 -depth 24
               sleep 5
             fi
             
