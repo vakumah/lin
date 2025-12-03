@@ -21,7 +21,7 @@ jobs:
     - name: Install and Configure xRDP + Openbox
       run: |
         sudo apt update
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp openbox obconf tint2 lxterminal pcmanfm
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp openbox tint2 lxterminal pcmanfm firefox gedit wget curl git --no-install-recommends
 
         # enable xrdp
         sudo systemctl enable xrdp
@@ -29,20 +29,60 @@ jobs:
         # force use openbox session
         echo "openbox-session" > ~/.xsession
 
-        # openbox autostart
+        # openbox autostart with file manager and useful tools
         mkdir -p ~/.config/openbox
         cat > ~/.config/openbox/autostart << 'EOF'
         # Start tint2 panel
         tint2 &
-        # File manager desktop (disable wallpaper for speed, solid black)
-        pcmanfm --desktop --wallpaper-mode=color --wallpaper=black &
+        # PCManFM for file management (no desktop wallpaper to save resources)
+        pcmanfm --desktop --wallpaper-mode=color &
         EOF
+        
+        # Create desktop shortcuts for easy access
+        mkdir -p ~/Desktop
+        cat > ~/Desktop/file-manager.desktop << 'EOF'
+        [Desktop Entry]
+        Type=Application
+        Name=File Manager
+        Exec=pcmanfm
+        Icon=system-file-manager
+        EOF
+        chmod +x ~/Desktop/file-manager.desktop
+        
+        cat > ~/Desktop/terminal.desktop << 'EOF'
+        [Desktop Entry]
+        Type=Application
+        Name=Terminal
+        Exec=lxterminal
+        Icon=utilities-terminal
+        EOF
+        chmod +x ~/Desktop/terminal.desktop
+        
+        cat > ~/Desktop/browser.desktop << 'EOF'
+        [Desktop Entry]
+        Type=Application
+        Name=Firefox
+        Exec=firefox
+        Icon=firefox
+        EOF
+        chmod +x ~/Desktop/browser.desktop
 
-        # Performance tweaks xrdp
-        sudo sed -i 's/max_bpp=32/max_bpp=16/' /etc/xrdp/xrdp.ini
+        # Aggressive xrdp performance tweaks
+        sudo sed -i 's/max_bpp=32/max_bpp=8/' /etc/xrdp/xrdp.ini
         sudo sed -i 's/#tcp_nodelay=1/tcp_nodelay=1/' /etc/xrdp/xrdp.ini
         sudo sed -i 's/#tcp_keepalive=1/tcp_keepalive=1/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/crypt_level=high/crypt_level=low/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/crypt_level=high/crypt_level=none/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/bitmap_cache=yes/bitmap_cache=no/' /etc/xrdp/xrdp.ini
+        sudo sed -i 's/bitmap_compression=yes/bitmap_compression=no/' /etc/xrdp/xrdp.ini
+        
+        # Reduce xrdp session timeout and memory usage
+        echo "MaxSessions=1" | sudo tee -a /etc/xrdp/xrdp.ini
+        echo "KillDisconnected=true" | sudo tee -a /etc/xrdp/xrdp.ini
+        
+        # sesman config - prevent session accumulation
+        sudo sed -i 's/MaxSessions=50/MaxSessions=1/' /etc/xrdp/sesman.ini
+        sudo sed -i 's/DisconnectedTimeLimit=0/DisconnectedTimeLimit=60/' /etc/xrdp/sesman.ini
+        sudo sed -i 's/IdleTimeLimit=0/IdleTimeLimit=0/' /etc/xrdp/sesman.ini
 
         # Add xrdp user to ssl-cert group
         sudo adduser xrdp ssl-cert
@@ -54,24 +94,71 @@ jobs:
         echo 'runner:p@ssw0rd!' | sudo chpasswd
         sudo usermod -aG sudo runner
 
+    - name: Download and Install Android Studio
+      run: |
+        mkdir -p ~/Downloads
+        cd ~/Downloads
+        
+        # Download Android Studio 2025.2.1.8
+        echo "Downloading Android Studio 2025.2.1.8..."
+        wget -q https://redirector.gvt1.com/edgedl/android/studio/ide-zips/2025.2.1.8/android-studio-2025.2.1.8-linux.tar.gz -O android-studio.tar.gz
+        
+        # Extract Android Studio
+        echo "Extracting Android Studio..."
+        tar -xzf android-studio.tar.gz -C ~/
+        
+        # Create desktop shortcut
+        cat > ~/Desktop/android-studio.desktop << 'EOF'
+        [Desktop Entry]
+        Type=Application
+        Name=Android Studio
+        Exec=/home/runner/android-studio/bin/studio.sh
+        Icon=/home/runner/android-studio/bin/studio.png
+        Terminal=false
+        EOF
+        chmod +x ~/Desktop/android-studio.desktop
+        
+        # Create quick launch script
+        echo '#!/bin/bash' > ~/android-studio.sh
+        echo 'cd ~/android-studio/bin && ./studio.sh' >> ~/android-studio.sh
+        chmod +x ~/android-studio.sh
+        
+        echo "Android Studio 2025.2.1 downloaded and ready!"
+        echo "Shortcut created on Desktop"
+
     - name: Advanced Performance Optimization
       run: |
-        # Disable heavy services
+        # Disable ALL unnecessary services aggressively
         sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
         sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
-        sudo systemctl disable unattended-upgrades || true
-        sudo systemctl stop unattended-upgrades || true
-        sudo systemctl disable ModemManager || true
-        sudo systemctl stop ModemManager || true
+        sudo systemctl disable unattended-upgrades apt-daily.timer apt-daily-upgrade.timer || true
+        sudo systemctl stop unattended-upgrades apt-daily.timer apt-daily-upgrade.timer || true
+        sudo systemctl disable ModemManager bluetooth cups avahi-daemon || true
+        sudo systemctl stop ModemManager bluetooth cups avahi-daemon || true
+        sudo systemctl mask systemd-journald-audit.socket || true
+        
+        # Kill resource-hungry processes
+        sudo pkill -9 packagekitd || true
+        sudo pkill -9 snapd || true
+        sudo pkill -9 unattended || true
 
         # CPU governor performance
         echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
 
-        # Network + memory tweaks
-        echo 'net.ipv4.tcp_window_scaling = 1' | sudo tee -a /etc/sysctl.conf
-        echo 'net.ipv4.tcp_timestamps = 1' | sudo tee -a /etc/sysctl.conf
-        echo 'vm.swappiness = 10' | sudo tee -a /etc/sysctl.conf
-        sudo sysctl -p || true
+        # Aggressive network + memory tweaks
+        sudo sysctl -w net.ipv4.tcp_window_scaling=1
+        sudo sysctl -w net.ipv4.tcp_timestamps=0
+        sudo sysctl -w net.ipv4.tcp_sack=1
+        sudo sysctl -w net.ipv4.tcp_fastopen=3
+        sudo sysctl -w net.core.rmem_max=134217728
+        sudo sysctl -w net.core.wmem_max=134217728
+        sudo sysctl -w vm.swappiness=1
+        sudo sysctl -w vm.dirty_ratio=10
+        sudo sysctl -w vm.dirty_background_ratio=5
+        sudo sysctl -w vm.vfs_cache_pressure=50
+        
+        # Disable swap completely for performance
+        sudo swapoff -a || true
 
     - name: Start Playit and Set Up RDP Tunnel
       env:
@@ -84,6 +171,37 @@ jobs:
         echo "Password: p@ssw0rd!"
         echo "Desktop: Openbox + Tint2 (ultra lightweight, optimized)"
 
-    - name: Keep the GitHub Action Runner Alive
+    - name: Monitor and Keep Alive with Auto-Restart
       run: |
+        # Function to restart xrdp if it gets sluggish
+        monitor_and_restart() {
+          while true; do
+            sleep 900  # Check every 15 minutes
+            
+            # Check memory usage
+            MEM_USAGE=$(free | grep Mem | awk '{print ($3/$2) * 100.0}')
+            MEM_THRESHOLD=85
+            
+            if (( $(echo "$MEM_USAGE > $MEM_THRESHOLD" | bc -l) )); then
+              echo "Memory usage high ($MEM_USAGE%), restarting xrdp..."
+              sudo systemctl restart xrdp
+              sleep 5
+            fi
+            
+            # Check if xrdp is responsive
+            if ! pgrep -x "xrdp" > /dev/null; then
+              echo "xrdp not running, restarting..."
+              sudo systemctl restart xrdp
+              sleep 5
+            fi
+            
+            # Clear cache periodically
+            sync; echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+          done
+        }
+        
+        # Start monitoring in background
+        monitor_and_restart &
+        
+        # Keep alive for 6 hours
         sleep 21600
