@@ -18,39 +18,38 @@ jobs:
         sudo mv playit-linux-amd64 /usr/local/bin/playit
         sleep 5
 
-    - name: Install and Configure xRDP + Openbox
+    - name: Install and Configure xRDP + XFCE
       run: |
         sudo apt update
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp openbox tint2 lxterminal pcmanfm firefox gedit wget curl git --no-install-recommends
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp xfce4 xfce4-terminal firefox gedit wget curl git --no-install-recommends
 
-        # enable xrdp
-        sudo systemctl enable xrdp
-
-        # force use openbox session - multiple methods to ensure it works
-        echo "openbox-session" > ~/.xsession
-        chmod +x ~/.xsession
-        echo "export XDG_SESSION_DESKTOP=openbox" >> ~/.xsessionrc
-        echo "export XDG_CURRENT_DESKTOP=openbox" >> ~/.xsessionrc
+        # Configure xrdp to use xfce
+        echo "xfce4-session" | tee ~/.xsession
         
-        # Create startwm.sh for xrdp to use openbox
+        # Create xrdp startup script
         cat << 'STARTWM' | sudo tee /etc/xrdp/startwm.sh > /dev/null
         #!/bin/sh
         if [ -r /etc/default/locale ]; then
           . /etc/default/locale
           export LANG LANGUAGE
         fi
-        exec openbox-session
+        startxfce4
         STARTWM
         sudo chmod +x /etc/xrdp/startwm.sh
-
-        # openbox autostart with file manager and useful tools
-        mkdir -p ~/.config/openbox
-        cat > ~/.config/openbox/autostart << 'EOF'
-        # Start tint2 panel
-        tint2 &
-        # PCManFM for file management (no desktop wallpaper to save resources)
-        pcmanfm --desktop --wallpaper-mode=color &
+        
+        # Disable xfce compositor for better performance
+        mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml
+        cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'EOF'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <channel name="xfwm4" version="1.0">
+          <property name="general" type="empty">
+            <property name="use_compositing" type="bool" value="false"/>
+          </property>
+        </channel>
         EOF
+
+        # enable xrdp
+        sudo systemctl enable xrdp
         
         # Create desktop shortcuts for easy access
         mkdir -p ~/Desktop
