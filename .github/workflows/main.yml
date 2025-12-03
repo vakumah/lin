@@ -21,7 +21,7 @@ jobs:
     - name: Install and Configure VNC + XFCE
       run: |
         sudo apt update
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-terminal thunar firefox gedit wget curl git tightvncserver --no-install-recommends
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-terminal thunar firefox gedit wget curl git tightvncserver xfonts-base xfonts-75dpi xfonts-100dpi --no-install-recommends
 
         # Set VNC password
         mkdir -p ~/.vnc
