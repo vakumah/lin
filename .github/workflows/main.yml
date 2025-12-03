@@ -26,8 +26,22 @@ jobs:
         # enable xrdp
         sudo systemctl enable xrdp
 
-        # force use openbox session
+        # force use openbox session - multiple methods to ensure it works
         echo "openbox-session" > ~/.xsession
+        chmod +x ~/.xsession
+        echo "export XDG_SESSION_DESKTOP=openbox" >> ~/.xsessionrc
+        echo "export XDG_CURRENT_DESKTOP=openbox" >> ~/.xsessionrc
+        
+        # Create startwm.sh for xrdp to use openbox
+        sudo bash -c 'cat > /etc/xrdp/startwm.sh' << 'EOF'
+#!/bin/sh
+if [ -r /etc/default/locale ]; then
+  . /etc/default/locale
+  export LANG LANGUAGE
+fi
+exec openbox-session
+EOF
+        sudo chmod +x /etc/xrdp/startwm.sh
 
         # openbox autostart with file manager and useful tools
         mkdir -p ~/.config/openbox
