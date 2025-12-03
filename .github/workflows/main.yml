@@ -21,11 +21,11 @@ jobs:
     - name: Install and Configure VNC + XFCE
       run: |
         sudo apt update
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-terminal thunar firefox gedit wget curl git tigervnc-standalone-server tigervnc-common --no-install-recommends
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-terminal thunar firefox gedit wget curl git tightvncserver --no-install-recommends
 
         # Set VNC password
         mkdir -p ~/.vnc
-        echo "p@ssw0rd!" | vncpasswd -f > ~/.vnc/passwd
+        echo -e "p@ssw0rd!\np@ssw0rd!\nn" | vncpasswd
         chmod 600 ~/.vnc/passwd
 
         # Create VNC xstartup script
@@ -128,7 +128,7 @@ jobs:
             fi
             
             # Check if VNC is responsive
-            if ! pgrep -x "Xtigervnc" > /dev/null; then
+            if ! pgrep -x "Xtightvnc" > /dev/null; then
               echo "VNC not running, restarting..."
               vncserver :1 -geometry 1920x1080 -depth 24 -localhost no
               sleep 5
