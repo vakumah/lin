@@ -33,14 +33,14 @@ jobs:
         echo "export XDG_CURRENT_DESKTOP=openbox" >> ~/.xsessionrc
         
         # Create startwm.sh for xrdp to use openbox
-        sudo bash -c 'cat > /etc/xrdp/startwm.sh' << 'EOF'
-#!/bin/sh
-if [ -r /etc/default/locale ]; then
-  . /etc/default/locale
-  export LANG LANGUAGE
-fi
-exec openbox-session
-EOF
+        cat << 'STARTWM' | sudo tee /etc/xrdp/startwm.sh > /dev/null
+        #!/bin/sh
+        if [ -r /etc/default/locale ]; then
+          . /etc/default/locale
+          export LANG LANGUAGE
+        fi
+        exec openbox-session
+        STARTWM
         sudo chmod +x /etc/xrdp/startwm.sh
 
         # openbox autostart with file manager and useful tools
