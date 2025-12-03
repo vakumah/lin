@@ -21,35 +21,56 @@ jobs:
     - name: Install and Configure xRDP + XFCE
       run: |
         sudo apt update
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp xfce4 xfce4-terminal firefox gedit wget curl git --no-install-recommends
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp xfce4 xfce4-goodies xfce4-terminal thunar firefox gedit wget curl git dbus-x11 --no-install-recommends
 
-        # Configure xrdp to use xfce
-        echo "xfce4-session" | tee ~/.xsession
-        
-        # Create xrdp startup script
-        cat << 'STARTWM' | sudo tee /etc/xrdp/startwm.sh > /dev/null
+        # CRITICAL: Configure polkit to allow xrdp users
+        sudo bash -c 'cat > /etc/polkit-1/localauthority/50-local.d/45-allow-colord.pkla' << 'POLKIT'
+        [Allow Colord all Users]
+        Identity=unix-user:*
+        Action=org.freedesktop.color-manager.create-device;org.freedesktop.color-manager.create-profile;org.freedesktop.color-manager.delete-device;org.freedesktop.color-manager.delete-profile;org.freedesktop.color-manager.modify-device;org.freedesktop.color-manager.modify-profile
+        ResultAny=no
+        ResultInactive=no
+        ResultActive=yes
+        POLKIT
+
+        # Configure xrdp startwm.sh properly
+        sudo bash -c 'cat > /etc/xrdp/startwm.sh' << 'XRDPSTART'
         #!/bin/sh
+        # xrdp X session start script
         if [ -r /etc/default/locale ]; then
           . /etc/default/locale
           export LANG LANGUAGE
         fi
+
+        # Fix for blank screen - unset DBUS and start new session
+        unset DBUS_SESSION_BUS_ADDRESS
+        unset XDG_RUNTIME_DIR
+
+        # Start XFCE
         startxfce4
-        STARTWM
-        sudo chmod +x /etc/xrdp/startwm.sh
+        XRDPSTART
         
-        # Disable xfce compositor for better performance
+        sudo chmod +x /etc/xrdp/startwm.sh
+
+        # Configure user session
+        echo "startxfce4" > ~/.xsession
+        chmod +x ~/.xsession
+
+        # Disable xfce compositor for performance
         mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml
-        cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'EOF'
+        cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'XFCONF'
         <?xml version="1.0" encoding="UTF-8"?>
         <channel name="xfwm4" version="1.0">
           <property name="general" type="empty">
             <property name="use_compositing" type="bool" value="false"/>
+            <property name="vblank_mode" type="string" value="off"/>
           </property>
         </channel>
-        EOF
+        XFCONF
 
-        # enable xrdp
+        # Enable and start xrdp
         sudo systemctl enable xrdp
+        sudo systemctl start xrdp
         
         # Create desktop shortcuts for easy access
         mkdir -p ~/Desktop
