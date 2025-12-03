@@ -107,38 +107,6 @@ jobs:
         echo 'runner:p@ssw0rd!' | sudo chpasswd
         sudo usermod -aG sudo runner
 
-    - name: Download and Install Android Studio
-      run: |
-        mkdir -p ~/Downloads
-        cd ~/Downloads
-        
-        # Download Android Studio 2025.2.1.8
-        echo "Downloading Android Studio 2025.2.1.8..."
-        wget -q https://redirector.gvt1.com/edgedl/android/studio/ide-zips/2025.2.1.8/android-studio-2025.2.1.8-linux.tar.gz -O android-studio.tar.gz
-        
-        # Extract Android Studio
-        echo "Extracting Android Studio..."
-        tar -xzf android-studio.tar.gz -C ~/
-        
-        # Create desktop shortcut
-        cat > ~/Desktop/android-studio.desktop << 'EOF'
-        [Desktop Entry]
-        Type=Application
-        Name=Android Studio
-        Exec=/home/runner/android-studio/bin/studio.sh
-        Icon=/home/runner/android-studio/bin/studio.png
-        Terminal=false
-        EOF
-        chmod +x ~/Desktop/android-studio.desktop
-        
-        # Create quick launch script
-        echo '#!/bin/bash' > ~/android-studio.sh
-        echo 'cd ~/android-studio/bin && ./studio.sh' >> ~/android-studio.sh
-        chmod +x ~/android-studio.sh
-        
-        echo "Android Studio 2025.2.1 downloaded and ready!"
-        echo "Shortcut created on Desktop"
-
     - name: Advanced Performance Optimization
       run: |
         # Disable ALL unnecessary services aggressively
