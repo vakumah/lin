@@ -18,44 +18,26 @@ jobs:
         sudo mv playit-linux-amd64 /usr/local/bin/playit
         sleep 5
 
-    - name: Install and Configure xRDP + XFCE
+    - name: Install and Configure VNC + XFCE
       run: |
         sudo apt update
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xrdp xfce4 xfce4-goodies xfce4-terminal thunar firefox gedit wget curl git dbus-x11 --no-install-recommends
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-terminal thunar firefox gedit wget curl git tigervnc-standalone-server tigervnc-common --no-install-recommends
 
-        # CRITICAL: Configure polkit to allow xrdp users
-        sudo mkdir -p /etc/polkit-1/localauthority/50-local.d
-        sudo bash -c 'cat > /etc/polkit-1/localauthority/50-local.d/45-allow-colord.pkla' << 'POLKIT'
-        [Allow Colord all Users]
-        Identity=unix-user:*
-        Action=org.freedesktop.color-manager.create-device;org.freedesktop.color-manager.create-profile;org.freedesktop.color-manager.delete-device;org.freedesktop.color-manager.delete-profile;org.freedesktop.color-manager.modify-device;org.freedesktop.color-manager.modify-profile
-        ResultAny=no
-        ResultInactive=no
-        ResultActive=yes
-        POLKIT
+        # Set VNC password
+        mkdir -p ~/.vnc
+        echo "p@ssw0rd!" | vncpasswd -f > ~/.vnc/passwd
+        chmod 600 ~/.vnc/passwd
 
-        # Configure xrdp startwm.sh properly
-        sudo bash -c 'cat > /etc/xrdp/startwm.sh' << 'XRDPSTART'
-        #!/bin/sh
-        # xrdp X session start script
-        if [ -r /etc/default/locale ]; then
-          . /etc/default/locale
-          export LANG LANGUAGE
-        fi
-
-        # Fix for blank screen - unset DBUS and start new session
+        # Create VNC xstartup script
+        cat > ~/.vnc/xstartup << 'VNCSTART'
+        #!/bin/bash
+        unset SESSION_MANAGER
         unset DBUS_SESSION_BUS_ADDRESS
-        unset XDG_RUNTIME_DIR
-
-        # Start XFCE
-        startxfce4
-        XRDPSTART
-        
-        sudo chmod +x /etc/xrdp/startwm.sh
-
-        # Configure user session
-        echo "startxfce4" > ~/.xsession
-        chmod +x ~/.xsession
+        export XDG_SESSION_TYPE=x11
+        export GDK_BACKEND=x11
+        exec startxfce4
+        VNCSTART
+        chmod +x ~/.vnc/xstartup
 
         # Disable xfce compositor for performance
         mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml
@@ -69,60 +51,12 @@ jobs:
         </channel>
         XFCONF
 
-        # Enable and start xrdp
-        sudo systemctl enable xrdp
-        sudo systemctl start xrdp
+        # Start VNC server
+        vncserver :1 -geometry 1920x1080 -depth 24 -localhost no
         
-        # Create desktop shortcuts for easy access
-        mkdir -p ~/Desktop
-        cat > ~/Desktop/file-manager.desktop << 'EOF'
-        [Desktop Entry]
-        Type=Application
-        Name=File Manager
-        Exec=pcmanfm
-        Icon=system-file-manager
-        EOF
-        chmod +x ~/Desktop/file-manager.desktop
-        
-        cat > ~/Desktop/terminal.desktop << 'EOF'
-        [Desktop Entry]
-        Type=Application
-        Name=Terminal
-        Exec=lxterminal
-        Icon=utilities-terminal
-        EOF
-        chmod +x ~/Desktop/terminal.desktop
-        
-        cat > ~/Desktop/browser.desktop << 'EOF'
-        [Desktop Entry]
-        Type=Application
-        Name=Firefox
-        Exec=firefox
-        Icon=firefox
-        EOF
-        chmod +x ~/Desktop/browser.desktop
+        echo "VNC Server started on display :1"
+        echo "VNC Password: p@ssw0rd!"
 
-        # Aggressive xrdp performance tweaks
-        sudo sed -i 's/max_bpp=32/max_bpp=8/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/#tcp_nodelay=1/tcp_nodelay=1/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/#tcp_keepalive=1/tcp_keepalive=1/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/crypt_level=high/crypt_level=none/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/bitmap_cache=yes/bitmap_cache=no/' /etc/xrdp/xrdp.ini
-        sudo sed -i 's/bitmap_compression=yes/bitmap_compression=no/' /etc/xrdp/xrdp.ini
-        
-        # Reduce xrdp session timeout and memory usage
-        echo "MaxSessions=1" | sudo tee -a /etc/xrdp/xrdp.ini
-        echo "KillDisconnected=true" | sudo tee -a /etc/xrdp/xrdp.ini
-        
-        # sesman config - prevent session accumulation
-        sudo sed -i 's/MaxSessions=50/MaxSessions=1/' /etc/xrdp/sesman.ini
-        sudo sed -i 's/DisconnectedTimeLimit=0/DisconnectedTimeLimit=60/' /etc/xrdp/sesman.ini
-        sudo sed -i 's/IdleTimeLimit=0/IdleTimeLimit=0/' /etc/xrdp/sesman.ini
-
-        # Add xrdp user to ssl-cert group
-        sudo adduser xrdp ssl-cert
-
-        sudo systemctl restart xrdp
 
     - name: Set User Password
       run: |
@@ -163,20 +97,20 @@ jobs:
         # Disable swap completely for performance
         sudo swapoff -a || true
 
-    - name: Start Playit and Set Up RDP Tunnel
+    - name: Start Playit and Set Up VNC Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
       run: |
         playit --secret $PLAYIT_AUTH_KEY &
         sleep 10
-        echo "RDP is ready on port 3389"
-        echo "Username: runner"
-        echo "Password: p@ssw0rd!"
-        echo "Desktop: Openbox + Tint2 (ultra lightweight, optimized)"
+        echo "VNC Server is ready on port 5901"
+        echo "VNC Password: p@ssw0rd!"
+        echo "Desktop: XFCE4 (lightweight, optimized)"
+        echo "Connect using VNC client to the Playit tunnel address"
 
     - name: Monitor and Keep Alive with Auto-Restart
       run: |
-        # Function to restart xrdp if it gets sluggish
+        # Function to restart VNC if it gets sluggish
         monitor_and_restart() {
           while true; do
             sleep 900  # Check every 15 minutes
@@ -186,15 +120,17 @@ jobs:
             MEM_THRESHOLD=85
             
             if (( $(echo "$MEM_USAGE > $MEM_THRESHOLD" | bc -l) )); then
-              echo "Memory usage high ($MEM_USAGE%), restarting xrdp..."
-              sudo systemctl restart xrdp
+              echo "Memory usage high ($MEM_USAGE%), restarting VNC..."
+              vncserver -kill :1
+              sleep 2
+              vncserver :1 -geometry 1920x1080 -depth 24 -localhost no
               sleep 5
             fi
             
-            # Check if xrdp is responsive
-            if ! pgrep -x "xrdp" > /dev/null; then
-              echo "xrdp not running, restarting..."
-              sudo systemctl restart xrdp
+            # Check if VNC is responsive
+            if ! pgrep -x "Xtigervnc" > /dev/null; then
+              echo "VNC not running, restarting..."
+              vncserver :1 -geometry 1920x1080 -depth 24 -localhost no
               sleep 5
             fi
             
