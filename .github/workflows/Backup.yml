@@ -1,4 +1,4 @@
-name: Playit RDP Tunnel Linux (Openbox Optimized)
+name: Playit RDP Tunnel Linux (backup) 
 
 on:
   workflow_dispatch:
