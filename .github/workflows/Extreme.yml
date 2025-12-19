@@ -1,4 +1,4 @@
-name: Linux Zero-Lag 8-Bit (Fixed Version)
+name: Linux Zero-Lag 8-Bit (Final Fix)
 
 on:
   workflow_dispatch:
@@ -13,17 +13,22 @@ jobs:
 
     - name: Global Clean & Performance Prep
       run: |
-        # Menggunakan || true agar mengabaikan error jika servis tidak ditemukan
+        # Menggunakan || true agar tidak error jika servis tidak ada
         sudo systemctl stop unattended-upgrades || true
         sudo apt-get remove -y google-cloud-cli azure-cli dotnet-sdk-* mono-complete || true
 
     - name: Install TigerVNC & XFCE (Ultra-Light)
       run: |
         sudo apt update
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-terminal tigervnc-standalone-server firefox --no-install-recommends
+        # Install tigervnc-common secara spesifik untuk memastikan vncpasswd tersedia
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-terminal tigervnc-standalone-server tigervnc-common firefox --no-install-recommends
         
+        # Jeda 2 detik untuk memastikan binari terdaftar
+        sleep 2
+        
+        # Setup Password VNC menggunakan path lengkap /usr/bin/vncpasswd jika perlu
         mkdir -p ~/.vnc
-        echo -e "p@ssw0rd!\np@ssw0rd!\nn" | vncpasswd
+        echo -e "p@ssw0rd!\np@ssw0rd!\nn" | /usr/bin/vncpasswd
         chmod 600 ~/.vnc/passwd
 
         cat > ~/.vnc/xstartup << 'VNCSTART'
@@ -34,6 +39,43 @@ jobs:
         VNCSTART
         chmod +x ~/.vnc/xstartup
 
+    - name: Extreme 8-Bit & Network "Doping"
+      run: |
+        # Matikan compositor XFCE via config
+        mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml
+        echo '<?xml version="1.0" encoding="UTF-8"?><channel name="xfwm4" version="1.0"><property name="general" type="empty"><property name="use_compositing" type="bool" value="false"/></property></channel>' > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+
+        # Jalankan VNC 8-Bit (Low Bandwidth)
+        /usr/bin/vncserver -kill :1 || true
+        /usr/bin/vncserver :1 -geometry 1024x768 -depth 8 -localhost no -rfbport 5901
+
+        # Tweak Network
+        sudo sysctl -w net.ipv4.tcp_low_latency=1
+        sudo sysctl -w net.ipv4.tcp_fastopen=3
+
+    - name: Firefox "Potato Mode"
+      run: |
+        sudo mkdir -p /etc/firefox/syspref.js
+        echo 'pref("gfx.webrender.all", false);' | sudo tee -a /etc/firefox/syspref.js
+        echo 'pref("layers.acceleration.disabled", true);' | sudo tee -a /etc/firefox/syspref.js
+
+    - name: Start Playit Tunnel
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+      run: |
+        wget https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64
+        chmod +x playit-linux-amd64
+        ./playit-linux-amd64 --secret $PLAYIT_AUTH_KEY &
+        sleep 10
+
+    - name: Monitoring & Auto-Clean
+      run: |
+        echo "VNC 8-Bit Berhasil Dijalankan!"
+        echo "Password: p@ssw0rd!"
+        while true; do
+          sync; echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+          sleep 120
+        done
     - name: Extreme 8-Bit & Network "Doping"
       run: |
         # Mematikan compositor XFCE via command line agar tidak lag
