@@ -1,4 +1,4 @@
-name: Linux Zero-Lag 8-Bit (Maximum Performance)
+name: Linux Zero-Lag 8-Bit (Fixed Version)
 
 on:
   workflow_dispatch:
@@ -13,8 +13,8 @@ jobs:
 
     - name: Global Clean & Performance Prep
       run: |
-        # Matikan update background agar tidak mencuri bandwidth saat kamu pakai
-        sudo systemctl stop unattended-upgrades
+        # Menggunakan || true agar mengabaikan error jika servis tidak ditemukan
+        sudo systemctl stop unattended-upgrades || true
         sudo apt-get remove -y google-cloud-cli azure-cli dotnet-sdk-* mono-complete || true
 
     - name: Install TigerVNC & XFCE (Ultra-Light)
@@ -30,34 +30,29 @@ jobs:
         #!/bin/bash
         unset SESSION_MANAGER
         unset DBUS_SESSION_BUS_ADDRESS
-        # Matikan dekorasi jendela yang berat
-        xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false
         startxfce4 &
         VNCSTART
         chmod +x ~/.vnc/xstartup
 
     - name: Extreme 8-Bit & Network "Doping"
       run: |
-        # 1. PAKSA 8-BIT & RESOLUSI RENDAH (Kunci Utama Anti-Lag)
-        # Kita pakai resolusi 1024x768 tapi dengan kedalaman warna 8-bit (256 warna saja)
+        # Mematikan compositor XFCE via command line agar tidak lag
+        mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml
+        echo '<?xml version="1.0" encoding="UTF-8"?><channel name="xfwm4" version="1.0"><property name="general" type="empty"><property name="use_compositing" type="bool" value="false"/></property></channel>' > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+
+        # Jalankan VNC 8-Bit
         vncserver -kill :1 || true
         vncserver :1 -geometry 1024x768 -depth 8 -localhost no -rfbport 5901
 
-        # 2. TWEAK KERNEL UNTUK INTERNET BUSUK
-        # Mempercepat pengiriman paket kecil (mouse/keyboard)
-        sudo sysctl -w net.ipv4.tcp_nometrics_save=1
+        # Tweak Network Latency
         sudo sysctl -w net.ipv4.tcp_low_latency=1
         sudo sysctl -w net.ipv4.tcp_fastopen=3
-        sudo sysctl -w net.ipv4.tcp_fin_timeout=15
-        sudo sysctl -w net.ipv4.tcp_keepalive_time=60
 
     - name: Firefox "Potato Mode"
       run: |
-        # Buat Firefox tidak merender animasi/gambar berat
         sudo mkdir -p /etc/firefox/syspref.js
         echo 'pref("gfx.webrender.all", false);' | sudo tee -a /etc/firefox/syspref.js
         echo 'pref("layers.acceleration.disabled", true);' | sudo tee -a /etc/firefox/syspref.js
-        echo 'pref("image.animation_mode", "none");' | sudo tee -a /etc/firefox/syspref.js
 
     - name: Start Playit Tunnel
       env:
@@ -70,9 +65,8 @@ jobs:
 
     - name: Monitoring & Auto-Clean
       run: |
-        echo "VNC 8-Bit is Running!"
+        echo "VNC 8-Bit Aktif! Silakan hubungkan."
         while true; do
-          # Paksa Linux membuang sampah RAM setiap 2 menit
           sync; echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
           sleep 120
         done
