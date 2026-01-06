@@ -65,6 +65,14 @@ jobs:
 
     - name: Advanced Performance Optimization
       run: |
+        # Uninstall unnecessary large packages to free up space and memory
+        sudo apt-get remove -y azure-cli google-cloud-cli google-cloud-cli-anthos-auth kubectl \
+          llvm-18-dev llvm-17-dev llvm-16-dev \
+          temurin-25-jdk temurin-8-jdk temurin-11-jdk temurin-21-jdk \
+          mono-complete dotnet-sdk-* || true
+        sudo apt-get autoremove -y || true
+        sudo apt-get clean || true
+        
         # Disable ALL unnecessary services aggressively
         sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
         sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
