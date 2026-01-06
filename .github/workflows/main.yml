@@ -1,116 +1,26 @@
-name: RDP Potato 8-Bit (Final Fix + Fonts)
-
-on:
-  workflow_dispatch:
-
-jobs:
-  rdp-rescue:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout Repo
-      uses: actions/checkout@v2
-
-    - name: 🚀 Install Bore (Tunneling)
+    - name: 🔥 Start VNC & Bore (Max 6 Jam)
+      timeout-minutes: 360  # Pastikan timeout job di-set max
       run: |
-        wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
-        tar -xf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
-        sudo mv bore /usr/local/bin/
-        rm bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
-
-    - name: 🧹 Hapus Bloatware (Clean Up)
-      run: |
-        # Hapus yang berat-berat
-        sudo apt-get remove -y azure-cli google-cloud-cli dotnet-sdk-* llvm-* mono-* temurin-* mysql* php* firefox || true
-        sudo apt-get autoremove -y
-        sudo apt-get clean
-        # Matiin service snapd yang suka ganggu
-        sudo systemctl disable snapd.service || true
-        sudo systemctl stop snapd.service || true
-
-    - name: 📦 Install IceWM + FONTS (Wajib!)
-      run: |
-        sudo apt update
-        # FIX DISINI: Ditambahin xfonts-base xfonts-100dpi xfonts-75dpi biar gak error "font fixed not found"
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y icewm pcmanfm xterm chromium-browser tightvncserver x11-xserver-utils xfonts-base xfonts-100dpi xfonts-75dpi --no-install-recommends
-
-    - name: ⚡ Tuning Network & CPU
-      run: |
-        sudo sysctl -w net.ipv4.tcp_window_scaling=1
-        sudo sysctl -w net.core.rmem_max=8388608
-        sudo sysctl -w net.core.wmem_max=8388608
-        echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
-
-    - name: 🔧 Config VNC & Desktop (8-Bit Mode)
-      run: |
-        mkdir -p ~/.vnc
-        mkdir -p ~/.icewm
-        
-        # Bikin file .Xauthority biar gak complain
-        touch ~/.Xauthority
-        
-        # Password VNC: 123456
-        echo "123456" | vncpasswd -f > ~/.vnc/passwd
-        chmod 600 ~/.vnc/passwd
-
-        # Config IceWM - No Animation, No Gradient, Wireframe Move
-        echo "Theme=\"default\"" > ~/.icewm/theme
-        echo "OpaqueMove=0" >> ~/.icewm/preferences
-        echo "OpaqueResize=0" >> ~/.icewm/preferences
-        echo "ShowTaskBar=1" >> ~/.icewm/preferences
-        echo "TaskBarShowClock=1" >> ~/.icewm/preferences
-        echo "MenuMouseTracking=0" >> ~/.icewm/preferences
-
-        # Script startup
-        cat > ~/.vnc/xstartup << 'EOF'
-        #!/bin/sh
-        unset SESSION_MANAGER
-        unset DBUS_SESSION_BUS_ADDRESS
-        export XDG_SESSION_TYPE=x11
-        
-        # Load fonts manual (jaga-jaga)
-        xset +fp /usr/share/fonts/X11/misc/
-        xset +fp /usr/share/fonts/X11/75dpi/
-        xset +fp /usr/share/fonts/X11/100dpi/
-        xset fp rehash
-        
-        xset s off
-        xset -dpms
-        xsetroot -solid black
-        
-        # Desktop manager buat icon
-        pcmanfm --desktop &
-        
-        # Window Manager
-        exec icewm-session
-        EOF
-        
-        chmod +x ~/.vnc/xstartup
-
-    - name: 🌐 Browser Anti-Lag
-      run: |
-        mkdir -p ~/Desktop
-        
-        cat > ~/Desktop/Internet.desktop << 'EOF'
-        [Desktop Entry]
-        Version=1.0
-        Type=Application
-        Name=Chromium Fast
-        Exec=chromium-browser --no-sandbox --disable-smooth-scrolling --disable-gpu --disable-software-rasterizer --disable-gpu-compositing --disable-animations --disable-gpu-vsync
-        Icon=chromium-browser
-        EOF
-        
-        chmod +x ~/Desktop/Internet.desktop
-
-    - name: 🔥 Start VNC (8-Bit) & Bore
-      run: |
-        # Start VNC Server 8-bit color
+        # 1. Start VNC
         vncserver :1 -geometry 1280x720 -depth 8 -pixelformat bgr233
+        
+        # 2. Jalanin Bore di background (nohup &) dan simpan log
+        nohup bore local 5901 --to bore.pub > bore.log 2>&1 &
+        
+        # Tunggu bentar biar bore connect
+        sleep 5
         
         echo "--------------------------------------------------------"
         echo "✅ VNC BERJALAN (Mode 8-Bit)!"
         echo "🔑 Password: 123456"
+        echo "👇 GUNAKAN ALAMAT INI DI VNC VIEWER:"
+        grep -o "bore.pub:[0-9]*" bore.log || cat bore.log
         echo "--------------------------------------------------------"
 
-        # Jalanin Bore Tunnel
-        bore local 5901 --to bore.pub
+        # 3. Script Keep Alive 6 Jam (21600 detik)
+        # Catatan: GitHub Actions akan otomatis kill job tepat di jam ke-6.
+        end=$((SECONDS+21600))
+        while [ $SECONDS -lt $end ]; do
+            echo "Job masih hidup... Sisa waktu: $(( (end - SECONDS) / 60 )) menit"
+            sleep 60
+        done
