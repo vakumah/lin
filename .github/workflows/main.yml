@@ -1,4 +1,4 @@
-name: RDP Potato 8-Bit (6 Hours)
+name: RDP Potato 8-Bit (Split Steps)
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
 jobs:
   rdp-rescue:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # Set batas waktu job ke 6 jam
+    timeout-minutes: 360  # Wajib ada biar gak mati sebelum 6 jam
 
     steps:
     - name: Checkout Repo
@@ -19,7 +19,7 @@ jobs:
         sudo mv bore /usr/local/bin/
         rm bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
 
-    - name: 🧹 Hapus Bloatware (Clean Up)
+    - name: 🧹 Hapus Bloatware
       run: |
         sudo apt-get remove -y azure-cli google-cloud-cli dotnet-sdk-* llvm-* mono-* temurin-* mysql* php* firefox || true
         sudo apt-get autoremove -y
@@ -30,7 +30,6 @@ jobs:
     - name: 📦 Install IceWM + FONTS
       run: |
         sudo apt update
-        # Paket font lengkap agar VNC tidak crash
         sudo DEBIAN_FRONTEND=noninteractive apt install -y icewm pcmanfm xterm chromium-browser tightvncserver x11-xserver-utils xfonts-base xfonts-100dpi xfonts-75dpi --no-install-recommends
 
     - name: ⚡ Tuning Network & CPU
@@ -40,17 +39,15 @@ jobs:
         sudo sysctl -w net.core.wmem_max=8388608
         echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
 
-    - name: 🔧 Config VNC & Desktop (8-Bit Mode)
+    - name: 🔧 Config VNC & Desktop
       run: |
         mkdir -p ~/.vnc
         mkdir -p ~/.icewm
         touch ~/.Xauthority
-        
-        # Password VNC: 123456
         echo "123456" | vncpasswd -f > ~/.vnc/passwd
         chmod 600 ~/.vnc/passwd
-
-        # Config IceWM Ringan
+        
+        # IceWM Config
         echo "Theme=\"default\"" > ~/.icewm/theme
         echo "OpaqueMove=0" >> ~/.icewm/preferences
         echo "OpaqueResize=0" >> ~/.icewm/preferences
@@ -58,25 +55,22 @@ jobs:
         echo "TaskBarShowClock=1" >> ~/.icewm/preferences
         echo "MenuMouseTracking=0" >> ~/.icewm/preferences
 
-        # Script startup
+        # xstartup
         cat > ~/.vnc/xstartup << 'EOF'
         #!/bin/sh
         unset SESSION_MANAGER
         unset DBUS_SESSION_BUS_ADDRESS
         export XDG_SESSION_TYPE=x11
-        
         xset +fp /usr/share/fonts/X11/misc/
         xset +fp /usr/share/fonts/X11/75dpi/
         xset +fp /usr/share/fonts/X11/100dpi/
         xset fp rehash
-        
         xset s off
         xset -dpms
         xsetroot -solid black
         pcmanfm --desktop &
         exec icewm-session
         EOF
-        
         chmod +x ~/.vnc/xstartup
 
     - name: 🌐 Browser Anti-Lag
@@ -92,29 +86,35 @@ jobs:
         EOF
         chmod +x ~/Desktop/Internet.desktop
 
-    - name: 🔥 Start VNC & Loop (Max 6 Jam)
+    # --- STEP 1: START VNC (Hanya menampilkan info lalu selesai) ---
+    - name: 🔥 Start VNC & Get Link
       run: |
-        # Start VNC Server 8-bit
+        # Start VNC
         vncserver :1 -geometry 1280x720 -depth 8 -pixelformat bgr233
         
-        # Start Bore di Background & Log outputnya
+        # Start Bore di Background
         nohup bore local 5901 --to bore.pub > bore.log 2>&1 &
         
-        # Tunggu bore connect
         sleep 5
         
         echo "========================================================"
-        echo "✅ VNC SIAP (Mode Potato 8-Bit)"
+        echo "✅ VNC BERJALAN!"
         echo "🔑 Password: 123456"
-        echo "👇 COPY ALAMAT INI KE VNC VIEWER:"
+        echo "👇 COPY ALAMAT INI (Step ini akan selesai, cek step bawah untuk status):"
         echo ""
         grep -o "bore.pub:[0-9]*" bore.log || cat bore.log
         echo ""
         echo "========================================================"
 
-        # Loop Keep Alive 6 Jam (21600 detik)
+    # --- STEP 2: KEEP ALIVE (Menahan server tetap hidup 6 jam) ---
+    - name: ⏳ Keep Alive (6 Jam)
+      run: |
+        echo "Server sedang berjalan..."
+        echo "Jangan cancel step ini jika masih ingin menggunakan RDP."
+        
         end=$((SECONDS+21600))
         while [ $SECONDS -lt $end ]; do
-            # Ping setiap menit agar tidak timeout karena idle
+            # Ping log setiap menit
+            echo "RDP Alive - Sisa waktu: $(( (end - SECONDS) / 60 )) menit"
             sleep 60
         done
