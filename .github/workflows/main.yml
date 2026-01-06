@@ -1,40 +1,124 @@
-name: Playit RDP Tunnel Linux (Openbox Optimized)
+name: RDP Ultra Potato (8-Bit + No Anim + Bore)
 
 on:
   workflow_dispatch:
 
 jobs:
-  setup-rdp-tunnel:
+  rdp-extreme-lite:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Check out the repository
+    - name: Checkout Repo
       uses: actions/checkout@v2
 
-    - name: Download and Install Playit
+    - name: 🚀 Install Bore (Tunneling)
       run: |
-        wget https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64
-        chmod +x playit-linux-amd64
-        sudo mv playit-linux-amd64 /usr/local/bin/playit
-        sleep 5
+        wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+        tar -xf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+        sudo mv bore /usr/local/bin/
+        rm bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
 
-    - name: Install and Configure VNC + XFCE
+    - name: 🧹 Hapus Bloatware (Biar RAM Lega)
+      run: |
+        sudo apt-get remove -y azure-cli google-cloud-cli dotnet-sdk-* llvm-* mono-* temurin-* mysql* php* firefox || true
+        sudo apt-get autoremove -y
+        sudo apt-get clean
+        # Matiin service background
+        sudo systemctl disable snapd.service || true
+        sudo systemctl stop snapd.service || true
+
+    - name: 📦 Install IceWM (Super Ringan) & Tools
       run: |
         sudo apt update
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y xfce4 xfce4-terminal thunar firefox gedit wget curl git tightvncserver xfonts-base xfonts-75dpi xfonts-100dpi --no-install-recommends
+        # Ganti LXQt ke IceWM. Ini DE purba yang jauh lebih ringan dari LXQt.
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y icewm xterm chromium-browser tightvncserver x11-xserver-utils --no-install-recommends
 
-        # Set VNC password
+    - name: ⚡ Kernel & Network Tweak (Agresif)
+      run: |
+        # Tuning network buffer biar packet loss dikit gak bikin lag parah
+        sudo sysctl -w net.ipv4.tcp_window_scaling=1
+        sudo sysctl -w net.core.rmem_max=8388608
+        sudo sysctl -w net.core.wmem_max=8388608
+        
+        # CPU Performance Mode
+        echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
+
+    - name: 🔧 Config VNC & Desktop (Mode Burik)
+      run: |
         mkdir -p ~/.vnc
-        echo -e "p@ssw0rd!\np@ssw0rd!\nn" | vncpasswd
+        mkdir -p ~/.icewm
+        
+        # Password default: 123456
+        echo "123456" | vncpasswd -f > ~/.vnc/passwd
         chmod 600 ~/.vnc/passwd
 
-        # Create VNC xstartup script
-        cat > ~/.vnc/xstartup << 'VNCSTART'
-        #!/bin/bash
+        # Konfigurasi IceWM biar jelek tapi ngebut
+        # Matiin background, taskbar gradient, dll
+        echo "Theme=\"default\"" > ~/.icewm/theme
+        echo "ShowTaskBar=1" >> ~/.icewm/preferences
+        echo "TaskBarShowClock=1" >> ~/.icewm/preferences
+        echo "TaskBarDoubleHeight=0" >> ~/.icewm/preferences
+        echo "OpaqueMove=0" >> ~/.icewm/preferences  # Pas geser window cuma keliatan garis (wireframe)
+        echo "OpaqueResize=0" >> ~/.icewm/preferences
+        echo "SmartPlacement=1" >> ~/.icewm/preferences
+        echo "MenuMouseTracking=0" >> ~/.icewm/preferences
+
+        # Script startup
+        cat > ~/.vnc/xstartup << 'EOF'
+        #!/bin/sh
         unset SESSION_MANAGER
         unset DBUS_SESSION_BUS_ADDRESS
         export XDG_SESSION_TYPE=x11
-        export GDK_BACKEND=x11
+        
+        # Matiin screensaver
+        xset s off
+        xset -dpms
+        
+        # Set background jadi Hitam Solid (Hemat bandwidth)
+        xsetroot -solid black
+        
+        # Jalanin IceWM
+        exec icewm-session
+        EOF
+        
+        chmod +x ~/.vnc/xstartup
+
+    - name: 🌐 Browser Anti-Lag (Chromium Tweak)
+      run: |
+        # Shortcut Chromium super optimized
+        cat > ~/Desktop/Internet.desktop << 'EOF'
+        [Desktop Entry]
+        Version=1.0
+        Type=Application
+        Name=Chromium Fast
+        # Flag penjelasan:
+        # --disable-smooth-scrolling: Scroll patah-patah (wajib buat RDP)
+        # --disable-gpu: CPU rendering only
+        # --blink-settings=imagesEnabled=true: Gambar tetep on (kalau mau off ganti false)
+        Exec=chromium-browser --no-sandbox --disable-smooth-scrolling --disable-gpu --disable-software-rasterizer --disable-gpu-compositing --disable-animations --disable-gpu-vsync
+        Icon=chromium-browser
+        EOF
+        
+        mkdir -p ~/Desktop
+        chmod +x ~/Desktop/Internet.desktop
+
+    - name: 🔥 Start VNC (8-Bit Color) & Bore
+      run: |
+        # Start VNC Server
+        # -geometry 1280x720 : Resolusi HD Ready (pas)
+        # -depth 8 : HANYA 256 WARNA (Ini kunci performanya)
+        # -pixelformat bgr233 : Format warna paling purba
+        vncserver :1 -geometry 1280x720 -depth 8 -pixelformat bgr233
+        
+        echo "--------------------------------------------------------"
+        echo "✅ VNC 8-BIT MODE AKTIF!"
+        echo "⚠️  Warna bakal kelihatan aneh/rusak, itu WAJAR demi speed."
+        echo "🔑 Password VNC: 123456"
+        echo "⏳ Connect ke address di bawah ini..."
+        echo "--------------------------------------------------------"
+
+        # Jalanin Bore
+        bore local 5901 --to bore.pub        export GDK_BACKEND=x11
         exec startxfce4
         VNCSTART
         chmod +x ~/.vnc/xstartup
