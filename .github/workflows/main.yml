@@ -1,4 +1,4 @@
-name: RDP Potato 8-Bit (Split Steps)
+name: RDP LXDE Potato (Super Ringan)
 
 on:
   workflow_dispatch:
@@ -6,13 +6,13 @@ on:
 jobs:
   rdp-rescue:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # Wajib ada biar gak mati sebelum 6 jam
+    timeout-minutes: 360
 
     steps:
     - name: Checkout Repo
       uses: actions/checkout@v2
 
-    - name: 🚀 Install Bore (Tunneling)
+    - name: 🚀 Install Bore
       run: |
         wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
         tar -xf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
@@ -27,94 +27,80 @@ jobs:
         sudo systemctl disable snapd.service || true
         sudo systemctl stop snapd.service || true
 
-    - name: 📦 Install IceWM + FONTS
+    - name: 📦 Install LXDE Core
       run: |
         sudo apt update
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y icewm pcmanfm xterm chromium-browser tightvncserver x11-xserver-utils xfonts-base xfonts-100dpi xfonts-75dpi --no-install-recommends
+        # Install LXDE Core (Tanpa aplikasi sampah) + Browser
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y lxde-core lxde-common lxde-icon-theme xorg dbus-x11 x11-xserver-utils xfonts-base xfonts-100dpi xfonts-75dpi chromium-browser --no-install-recommends
 
-    - name: ⚡ Tuning Network & CPU
+    - name: ⚡ Tuning Network
       run: |
         sudo sysctl -w net.ipv4.tcp_window_scaling=1
         sudo sysctl -w net.core.rmem_max=8388608
         sudo sysctl -w net.core.wmem_max=8388608
-        echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
 
-    - name: 🔧 Config VNC & Desktop
+    - name: 🔧 Config VNC & LXDE
       run: |
         mkdir -p ~/.vnc
-        mkdir -p ~/.icewm
         touch ~/.Xauthority
         echo "123456" | vncpasswd -f > ~/.vnc/passwd
         chmod 600 ~/.vnc/passwd
-        
-        # IceWM Config
-        echo "Theme=\"default\"" > ~/.icewm/theme
-        echo "OpaqueMove=0" >> ~/.icewm/preferences
-        echo "OpaqueResize=0" >> ~/.icewm/preferences
-        echo "ShowTaskBar=1" >> ~/.icewm/preferences
-        echo "TaskBarShowClock=1" >> ~/.icewm/preferences
-        echo "MenuMouseTracking=0" >> ~/.icewm/preferences
 
-        # xstartup
+        # Startup script LXDE
         cat > ~/.vnc/xstartup << 'EOF'
         #!/bin/sh
         unset SESSION_MANAGER
         unset DBUS_SESSION_BUS_ADDRESS
-        export XDG_SESSION_TYPE=x11
+        
+        # Load fonts
         xset +fp /usr/share/fonts/X11/misc/
-        xset +fp /usr/share/fonts/X11/75dpi/
-        xset +fp /usr/share/fonts/X11/100dpi/
         xset fp rehash
-        xset s off
-        xset -dpms
-        xsetroot -solid black
-        pcmanfm --desktop &
-        exec icewm-session
+        
+        # Start LXDE
+        exec startlxde
         EOF
         chmod +x ~/.vnc/xstartup
 
-    - name: 🌐 Browser Anti-Lag
+    - name: 🌐 Fix Browser Shortcut
       run: |
         mkdir -p ~/Desktop
-        cat > ~/Desktop/Internet.desktop << 'EOF'
+        # HAPUS flag --disable-software-rasterizer biar gambar muncul!
+        cat > ~/Desktop/Chromium.desktop << 'EOF'
         [Desktop Entry]
         Version=1.0
         Type=Application
-        Name=Chromium Fast
-        Exec=chromium-browser --no-sandbox --disable-smooth-scrolling --disable-gpu --disable-software-rasterizer --disable-gpu-compositing --disable-animations --disable-gpu-vsync
+        Name=Chromium Web
+        Exec=chromium-browser --no-sandbox --disable-gpu --disable-dev-shm-usage --start-maximized
         Icon=chromium-browser
+        Terminal=false
         EOF
-        chmod +x ~/Desktop/Internet.desktop
+        chmod +x ~/Desktop/Chromium.desktop
 
-    # --- STEP 1: START VNC (Hanya menampilkan info lalu selesai) ---
+    # --- STEP 1: START VNC (Hanya Info) ---
     - name: 🔥 Start VNC & Get Link
       run: |
-        # Start VNC
-        vncserver :1 -geometry 1280x720 -depth 8 -pixelformat bgr233
+        # Start VNC (16-bit biar warna browser normal, tapi tetap ringan)
+        vncserver :1 -geometry 1280x720 -depth 16 -pixelformat rgb565
         
-        # Start Bore di Background
+        # Start Bore
         nohup bore local 5901 --to bore.pub > bore.log 2>&1 &
-        
         sleep 5
         
         echo "========================================================"
-        echo "✅ VNC BERJALAN!"
+        echo "✅ LXDE DESKTOP READY!"
         echo "🔑 Password: 123456"
-        echo "👇 COPY ALAMAT INI (Step ini akan selesai, cek step bawah untuk status):"
+        echo "👇 COPY ALAMAT INI:"
         echo ""
         grep -o "bore.pub:[0-9]*" bore.log || cat bore.log
         echo ""
         echo "========================================================"
 
-    # --- STEP 2: KEEP ALIVE (Menahan server tetap hidup 6 jam) ---
+    # --- STEP 2: KEEP ALIVE (Looping 6 Jam) ---
     - name: ⏳ Keep Alive (6 Jam)
       run: |
-        echo "Server sedang berjalan..."
-        echo "Jangan cancel step ini jika masih ingin menggunakan RDP."
-        
+        echo "Server LXDE sedang berjalan..."
         end=$((SECONDS+21600))
         while [ $SECONDS -lt $end ]; do
-            # Ping log setiap menit
             echo "RDP Alive - Sisa waktu: $(( (end - SECONDS) / 60 )) menit"
             sleep 60
         done
