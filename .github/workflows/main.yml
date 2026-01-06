@@ -1,4 +1,4 @@
-name: RDP Ultra Potato (8-Bit + No Anim + Bore)
+name: RDP Ultra Potato (Fixed - 8Bit No Anim)
 
 on:
   workflow_dispatch:
@@ -18,29 +18,25 @@ jobs:
         sudo mv bore /usr/local/bin/
         rm bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
 
-    - name: 🧹 Hapus Bloatware (Biar RAM Lega)
+    - name: 🧹 Hapus Bloatware
       run: |
         sudo apt-get remove -y azure-cli google-cloud-cli dotnet-sdk-* llvm-* mono-* temurin-* mysql* php* firefox || true
         sudo apt-get autoremove -y
         sudo apt-get clean
-        # Matiin service background
         sudo systemctl disable snapd.service || true
         sudo systemctl stop snapd.service || true
 
-    - name: 📦 Install IceWM (Super Ringan) & Tools
+    - name: 📦 Install IceWM (Super Ringan)
       run: |
         sudo apt update
-        # Ganti LXQt ke IceWM. Ini DE purba yang jauh lebih ringan dari LXQt.
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y icewm xterm chromium-browser tightvncserver x11-xserver-utils --no-install-recommends
+        # Install IceWM + PCManFM (biar desktop icon muncul)
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y icewm pcmanfm xterm chromium-browser tightvncserver x11-xserver-utils --no-install-recommends
 
-    - name: ⚡ Kernel & Network Tweak (Agresif)
+    - name: ⚡ Kernel & Network Tweak
       run: |
-        # Tuning network buffer biar packet loss dikit gak bikin lag parah
         sudo sysctl -w net.ipv4.tcp_window_scaling=1
         sudo sysctl -w net.core.rmem_max=8388608
         sudo sysctl -w net.core.wmem_max=8388608
-        
-        # CPU Performance Mode
         echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
 
     - name: 🔧 Config VNC & Desktop (Mode Burik)
@@ -48,20 +44,14 @@ jobs:
         mkdir -p ~/.vnc
         mkdir -p ~/.icewm
         
-        # Password default: 123456
         echo "123456" | vncpasswd -f > ~/.vnc/passwd
         chmod 600 ~/.vnc/passwd
 
-        # Konfigurasi IceWM biar jelek tapi ngebut
-        # Matiin background, taskbar gradient, dll
+        # Config IceWM - Wireframe move (garis doang pas geser window)
         echo "Theme=\"default\"" > ~/.icewm/theme
-        echo "ShowTaskBar=1" >> ~/.icewm/preferences
-        echo "TaskBarShowClock=1" >> ~/.icewm/preferences
-        echo "TaskBarDoubleHeight=0" >> ~/.icewm/preferences
-        echo "OpaqueMove=0" >> ~/.icewm/preferences  # Pas geser window cuma keliatan garis (wireframe)
+        echo "OpaqueMove=0" >> ~/.icewm/preferences
         echo "OpaqueResize=0" >> ~/.icewm/preferences
-        echo "SmartPlacement=1" >> ~/.icewm/preferences
-        echo "MenuMouseTracking=0" >> ~/.icewm/preferences
+        echo "ShowTaskBar=1" >> ~/.icewm/preferences
 
         # Script startup
         cat > ~/.vnc/xstartup << 'EOF'
@@ -70,12 +60,12 @@ jobs:
         unset DBUS_SESSION_BUS_ADDRESS
         export XDG_SESSION_TYPE=x11
         
-        # Matiin screensaver
         xset s off
         xset -dpms
-        
-        # Set background jadi Hitam Solid (Hemat bandwidth)
         xsetroot -solid black
+        
+        # Jalanin PCManFM sebagai desktop manager biar icon muncul
+        pcmanfm --desktop &
         
         # Jalanin IceWM
         exec icewm-session
@@ -85,154 +75,30 @@ jobs:
 
     - name: 🌐 Browser Anti-Lag (Chromium Tweak)
       run: |
-        # Shortcut Chromium super optimized
+        # FIX: Buat folder Desktop DULUAN sebelum bikin file!
+        mkdir -p ~/Desktop
+        
+        # Bikin shortcut
         cat > ~/Desktop/Internet.desktop << 'EOF'
         [Desktop Entry]
         Version=1.0
         Type=Application
         Name=Chromium Fast
-        # Flag penjelasan:
-        # --disable-smooth-scrolling: Scroll patah-patah (wajib buat RDP)
-        # --disable-gpu: CPU rendering only
-        # --blink-settings=imagesEnabled=true: Gambar tetep on (kalau mau off ganti false)
         Exec=chromium-browser --no-sandbox --disable-smooth-scrolling --disable-gpu --disable-software-rasterizer --disable-gpu-compositing --disable-animations --disable-gpu-vsync
         Icon=chromium-browser
         EOF
         
-        mkdir -p ~/Desktop
         chmod +x ~/Desktop/Internet.desktop
 
     - name: 🔥 Start VNC (8-Bit Color) & Bore
       run: |
-        # Start VNC Server
-        # -geometry 1280x720 : Resolusi HD Ready (pas)
-        # -depth 8 : HANYA 256 WARNA (Ini kunci performanya)
-        # -pixelformat bgr233 : Format warna paling purba
+        # Start VNC Server 8-bit color depth
         vncserver :1 -geometry 1280x720 -depth 8 -pixelformat bgr233
         
         echo "--------------------------------------------------------"
-        echo "✅ VNC 8-BIT MODE AKTIF!"
-        echo "⚠️  Warna bakal kelihatan aneh/rusak, itu WAJAR demi speed."
-        echo "🔑 Password VNC: 123456"
-        echo "⏳ Connect ke address di bawah ini..."
+        echo "✅ VNC 8-BIT MODE SIAP!"
+        echo "🔑 Password: 123456"
         echo "--------------------------------------------------------"
 
         # Jalanin Bore
-        bore local 5901 --to bore.pub        export GDK_BACKEND=x11
-        exec startxfce4
-        VNCSTART
-        chmod +x ~/.vnc/xstartup
-
-        # Disable xfce compositor for performance
-        mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml
-        cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'XFCONF'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <channel name="xfwm4" version="1.0">
-          <property name="general" type="empty">
-            <property name="use_compositing" type="bool" value="false"/>
-            <property name="vblank_mode" type="string" value="off"/>
-          </property>
-        </channel>
-        XFCONF
-
-        # Start VNC server
-        vncserver :1 -geometry 1920x1080 -depth 24
-        
-        echo "VNC Server started on display :1"
-        echo "VNC Password: p@ssw0rd!"
-
-
-    - name: Set User Password
-      run: |
-        echo 'runner:p@ssw0rd!' | sudo chpasswd
-        sudo usermod -aG sudo runner
-
-    - name: Advanced Performance Optimization
-      run: |
-        # Uninstall unnecessary large packages to free up space and memory
-        sudo apt-get remove -y azure-cli google-cloud-cli google-cloud-cli-anthos-auth kubectl \
-          llvm-18-dev llvm-17-dev llvm-16-dev \
-          temurin-25-jdk temurin-8-jdk temurin-11-jdk temurin-21-jdk \
-          mono-complete dotnet-sdk-* || true
-        sudo apt-get autoremove -y || true
-        sudo apt-get clean || true
-        
-        # Disable ALL unnecessary services aggressively
-        sudo systemctl disable snapd.service snapd.socket snapd.seeded.service || true
-        sudo systemctl stop snapd.service snapd.socket snapd.seeded.service || true
-        sudo systemctl disable unattended-upgrades apt-daily.timer apt-daily-upgrade.timer || true
-        sudo systemctl stop unattended-upgrades apt-daily.timer apt-daily-upgrade.timer || true
-        sudo systemctl disable ModemManager bluetooth cups avahi-daemon || true
-        sudo systemctl stop ModemManager bluetooth cups avahi-daemon || true
-        sudo systemctl mask systemd-journald-audit.socket || true
-        
-        # Kill resource-hungry processes
-        sudo pkill -9 packagekitd || true
-        sudo pkill -9 snapd || true
-        sudo pkill -9 unattended || true
-
-        # CPU governor performance
-        echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
-
-        # Aggressive network + memory tweaks
-        sudo sysctl -w net.ipv4.tcp_window_scaling=1
-        sudo sysctl -w net.ipv4.tcp_timestamps=0
-        sudo sysctl -w net.ipv4.tcp_sack=1
-        sudo sysctl -w net.ipv4.tcp_fastopen=3
-        sudo sysctl -w net.core.rmem_max=134217728
-        sudo sysctl -w net.core.wmem_max=134217728
-        sudo sysctl -w vm.swappiness=1
-        sudo sysctl -w vm.dirty_ratio=10
-        sudo sysctl -w vm.dirty_background_ratio=5
-        sudo sysctl -w vm.vfs_cache_pressure=50
-        
-        # Disable swap completely for performance
-        sudo swapoff -a || true
-
-    - name: Start Playit and Set Up VNC Tunnel
-      env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
-      run: |
-        playit --secret $PLAYIT_AUTH_KEY &
-        sleep 10
-        echo "VNC Server is ready on port 5901"
-        echo "VNC Password: p@ssw0rd!"
-        echo "Desktop: XFCE4 (lightweight, optimized)"
-        echo "Connect using VNC client to the Playit tunnel address"
-
-    - name: Monitor and Keep Alive with Auto-Restart
-      run: |
-        # Function to restart VNC if it gets sluggish
-        monitor_and_restart() {
-          while true; do
-            sleep 900  # Check every 15 minutes
-            
-            # Check memory usage
-            MEM_USAGE=$(free | grep Mem | awk '{print ($3/$2) * 100.0}')
-            MEM_THRESHOLD=85
-            
-            if (( $(echo "$MEM_USAGE > $MEM_THRESHOLD" | bc -l) )); then
-              echo "Memory usage high ($MEM_USAGE%), restarting VNC..."
-              vncserver -kill :1
-              sleep 2
-              vncserver :1 -geometry 1920x1080 -depth 24
-              sleep 5
-            fi
-            
-            # Check if VNC is responsive
-            if ! pgrep -x "Xtightvnc" > /dev/null; then
-              echo "VNC not running, restarting..."
-              vncserver :1 -geometry 1920x1080 -depth 24
-              sleep 5
-            fi
-            
-            # Clear cache periodically
-            sync; echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-          done
-        }
-        
-        # Start monitoring in background
-        monitor_and_restart &
-        
-        # Keep alive for 6 hours
-        sleep 21600
+        bore local 5901 --to bore.pub
