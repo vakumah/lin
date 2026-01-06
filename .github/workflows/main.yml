@@ -1,10 +1,10 @@
-name: RDP Ultra Potato (Fixed - 8Bit No Anim)
+name: RDP Potato 8-Bit (Final Fix + Fonts)
 
 on:
   workflow_dispatch:
 
 jobs:
-  rdp-extreme-lite:
+  rdp-rescue:
     runs-on: ubuntu-latest
 
     steps:
@@ -18,40 +18,48 @@ jobs:
         sudo mv bore /usr/local/bin/
         rm bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
 
-    - name: 🧹 Hapus Bloatware
+    - name: 🧹 Hapus Bloatware (Clean Up)
       run: |
+        # Hapus yang berat-berat
         sudo apt-get remove -y azure-cli google-cloud-cli dotnet-sdk-* llvm-* mono-* temurin-* mysql* php* firefox || true
         sudo apt-get autoremove -y
         sudo apt-get clean
+        # Matiin service snapd yang suka ganggu
         sudo systemctl disable snapd.service || true
         sudo systemctl stop snapd.service || true
 
-    - name: 📦 Install IceWM (Super Ringan)
+    - name: 📦 Install IceWM + FONTS (Wajib!)
       run: |
         sudo apt update
-        # Install IceWM + PCManFM (biar desktop icon muncul)
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y icewm pcmanfm xterm chromium-browser tightvncserver x11-xserver-utils --no-install-recommends
+        # FIX DISINI: Ditambahin xfonts-base xfonts-100dpi xfonts-75dpi biar gak error "font fixed not found"
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y icewm pcmanfm xterm chromium-browser tightvncserver x11-xserver-utils xfonts-base xfonts-100dpi xfonts-75dpi --no-install-recommends
 
-    - name: ⚡ Kernel & Network Tweak
+    - name: ⚡ Tuning Network & CPU
       run: |
         sudo sysctl -w net.ipv4.tcp_window_scaling=1
         sudo sysctl -w net.core.rmem_max=8388608
         sudo sysctl -w net.core.wmem_max=8388608
         echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true
 
-    - name: 🔧 Config VNC & Desktop (Mode Burik)
+    - name: 🔧 Config VNC & Desktop (8-Bit Mode)
       run: |
         mkdir -p ~/.vnc
         mkdir -p ~/.icewm
         
+        # Bikin file .Xauthority biar gak complain
+        touch ~/.Xauthority
+        
+        # Password VNC: 123456
         echo "123456" | vncpasswd -f > ~/.vnc/passwd
         chmod 600 ~/.vnc/passwd
 
-        # Config IceWM - Wireframe move (garis doang pas geser window)
+        # Config IceWM - No Animation, No Gradient, Wireframe Move
         echo "Theme=\"default\"" > ~/.icewm/theme
         echo "OpaqueMove=0" >> ~/.icewm/preferences
         echo "OpaqueResize=0" >> ~/.icewm/preferences
         echo "ShowTaskBar=1" >> ~/.icewm/preferences
+        echo "TaskBarShowClock=1" >> ~/.icewm/preferences
+        echo "MenuMouseTracking=0" >> ~/.icewm/preferences
 
         # Script startup
         cat > ~/.vnc/xstartup << 'EOF'
@@ -60,25 +68,29 @@ jobs:
         unset DBUS_SESSION_BUS_ADDRESS
         export XDG_SESSION_TYPE=x11
         
+        # Load fonts manual (jaga-jaga)
+        xset +fp /usr/share/fonts/X11/misc/
+        xset +fp /usr/share/fonts/X11/75dpi/
+        xset +fp /usr/share/fonts/X11/100dpi/
+        xset fp rehash
+        
         xset s off
         xset -dpms
         xsetroot -solid black
         
-        # Jalanin PCManFM sebagai desktop manager biar icon muncul
+        # Desktop manager buat icon
         pcmanfm --desktop &
         
-        # Jalanin IceWM
+        # Window Manager
         exec icewm-session
         EOF
         
         chmod +x ~/.vnc/xstartup
 
-    - name: 🌐 Browser Anti-Lag (Chromium Tweak)
+    - name: 🌐 Browser Anti-Lag
       run: |
-        # FIX: Buat folder Desktop DULUAN sebelum bikin file!
         mkdir -p ~/Desktop
         
-        # Bikin shortcut
         cat > ~/Desktop/Internet.desktop << 'EOF'
         [Desktop Entry]
         Version=1.0
@@ -90,15 +102,15 @@ jobs:
         
         chmod +x ~/Desktop/Internet.desktop
 
-    - name: 🔥 Start VNC (8-Bit Color) & Bore
+    - name: 🔥 Start VNC (8-Bit) & Bore
       run: |
-        # Start VNC Server 8-bit color depth
+        # Start VNC Server 8-bit color
         vncserver :1 -geometry 1280x720 -depth 8 -pixelformat bgr233
         
         echo "--------------------------------------------------------"
-        echo "✅ VNC 8-BIT MODE SIAP!"
+        echo "✅ VNC BERJALAN (Mode 8-Bit)!"
         echo "🔑 Password: 123456"
         echo "--------------------------------------------------------"
 
-        # Jalanin Bore
+        # Jalanin Bore Tunnel
         bore local 5901 --to bore.pub
