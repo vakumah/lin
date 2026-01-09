@@ -1,4 +1,4 @@
-name: MacOS 15 VNC (Fixed)
+name: MacOS VNC Fix (Black Screen)
 
 on:
   workflow_dispatch:
@@ -11,29 +11,41 @@ jobs:
     - name: Checkout Source
       uses: actions/checkout@v4
 
-    - name: System Optimization
+    - name: System & GUI Optimization
       run: |
-        # Matikan Screensaver via User Preferences (bukan pmset)
-        defaults -currentHost write com.apple.screensaver idleTime 0
+        # 1. Login Otomatis & Disable Screen Lock
+        sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "runner"
+        sudo defaults write /Library/Preferences/com.apple.screensaver loginWindowIdleTime -int 0
         
-        # Disable UI Animations (Performance)
+        # 2. Disable Animations
         defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false
-        defaults write NSGlobalDomain NSWindowResizeTime -float 0.001
         defaults write com.apple.finder DisableAllAnimations -bool true
         
-        # Mencegah display sleep dengan caffeinate (background process)
-        caffeinate -u -t 20000 &
+        # 3. Mencegah Sleep (Penting!)
+        sudo systemsetup -setcomputersleep Never
+        sudo systemsetup -setdisplaysleep Never
 
-    - name: Enable VNC (Kickstart)
+    - name: Enable VNC (Aggressive Mode)
       run: |
-        # Mengaktifkan VNC dengan password "Mypassword!"
+        # Reset Remote Management
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate -configure -access -off
+        
+        # Aktifkan ulang dengan izin penuh
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on \
           -clientopts -setvnclegacy -vnclegacy yes \
           -clientopts -setvncpw -vncpw "Mypassword!" \
           -restart -agent -privs -all
         
-        echo "VNC Service Started on Port 5900"
+        echo "VNC Restarted"
+
+    - name: Force GUI Refresh (The Fix)
+      run: |
+        # Ini triknya: Kill WindowServer untuk memaksa refresh tampilan
+        # Layar mungkin akan disconnect sebentar lalu connect lagi saat masuk VNC
+        echo "Restarting WindowServer..."
+        sudo killall -HUP WindowServer || true
+        sleep 5
 
     - name: Start Bore Tunnel
       run: |
@@ -42,10 +54,10 @@ jobs:
         chmod +x bore
         
         echo "Starting Bore..."
-        # Cek Log step ini untuk URL. Contoh output: bore.pub:xxxxx
         ./bore local 5900 --to bore.pub
 
     - name: Keep Alive
       if: always()
       run: |
-        while true; do sleep 300; done
+        # Menjalankan caffeinate agar sistem 'melek' terus
+        caffeinate -u -i -s
