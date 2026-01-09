@@ -1,4 +1,4 @@
-name: MacOS VNC Fix (Black Screen)
+name: MacOS 15 VNC (Safe Mode)
 
 on:
   workflow_dispatch:
@@ -11,41 +11,25 @@ jobs:
     - name: Checkout Source
       uses: actions/checkout@v4
 
-    - name: System & GUI Optimization
+    - name: System Optimization (VM Friendly)
       run: |
-        # 1. Login Otomatis & Disable Screen Lock
-        sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "runner"
-        sudo defaults write /Library/Preferences/com.apple.screensaver loginWindowIdleTime -int 0
-        
-        # 2. Disable Animations
+        # Matikan animasi tanpa menyentuh hardware sleep (mencegah error systemsetup)
         defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false
         defaults write com.apple.finder DisableAllAnimations -bool true
         
-        # 3. Mencegah Sleep (Penting!)
-        sudo systemsetup -setcomputersleep Never
-        sudo systemsetup -setdisplaysleep Never
+        # Set auto-login untuk memastikan user aktif
+        sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "runner"
 
-    - name: Enable VNC (Aggressive Mode)
+    - name: Enable VNC (Standard)
       run: |
-        # Reset Remote Management
-        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate -configure -access -off
-        
-        # Aktifkan ulang dengan izin penuh
+        # Restart VNC Agent dengan bersih
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on \
           -clientopts -setvnclegacy -vnclegacy yes \
           -clientopts -setvncpw -vncpw "Mypassword!" \
           -restart -agent -privs -all
         
-        echo "VNC Restarted"
-
-    - name: Force GUI Refresh (The Fix)
-      run: |
-        # Ini triknya: Kill WindowServer untuk memaksa refresh tampilan
-        # Layar mungkin akan disconnect sebentar lalu connect lagi saat masuk VNC
-        echo "Restarting WindowServer..."
-        sudo killall -HUP WindowServer || true
-        sleep 5
+        echo "VNC Ready on Port 5900"
 
     - name: Start Bore Tunnel
       run: |
@@ -54,10 +38,14 @@ jobs:
         chmod +x bore
         
         echo "Starting Bore..."
-        ./bore local 5900 --to bore.pub
+        # Jalan di background agar bisa lanjut ke step Keep Alive
+        ./bore local 5900 --to bore.pub &
+        
+        # Beri waktu bore untuk connect dan print URL
+        sleep 5
 
-    - name: Keep Alive
-      if: always()
+    - name: Keep Alive & Log URL
       run: |
-        # Menjalankan caffeinate agar sistem 'melek' terus
+        echo "Tunnel is running in background. Check previous step logs for URL."
+        # Caffeinate mencegah sleep dari sisi software
         caffeinate -u -i -s
