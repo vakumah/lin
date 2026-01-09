@@ -1,11 +1,10 @@
-name: MacOS 15 VNC Optimization (Bore)
+name: MacOS 15 VNC (Fixed)
 
 on:
   workflow_dispatch:
 
 jobs:
   macos-setup:
-    # Update ke macOS 15 (Apple Silicon/M1/M2)
     runs-on: macos-15
 
     steps:
@@ -14,21 +13,20 @@ jobs:
 
     - name: System Optimization
       run: |
-        # Disable Sleep & Screensaver
-        sudo pmset -a sleep 0
-        sudo pmset -a displaysleep 0
-        sudo pmset -a screensaver 0
+        # Matikan Screensaver via User Preferences (bukan pmset)
+        defaults -currentHost write com.apple.screensaver idleTime 0
         
         # Disable UI Animations (Performance)
         defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false
         defaults write NSGlobalDomain NSWindowResizeTime -float 0.001
         defaults write com.apple.finder DisableAllAnimations -bool true
-        killall Finder
+        
+        # Mencegah display sleep dengan caffeinate (background process)
+        caffeinate -u -t 20000 &
 
     - name: Enable VNC (Kickstart)
       run: |
         # Mengaktifkan VNC dengan password "Mypassword!"
-        # Perlu diingat: macOS 15 punya security TCC ketat, mungkin ada kendala akses mouse
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on \
           -clientopts -setvnclegacy -vnclegacy yes \
@@ -39,13 +37,12 @@ jobs:
 
     - name: Start Bore Tunnel
       run: |
-        # Download Bore (versi x86 berjalan via Rosetta di ARM64)
         curl -L "https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-apple-darwin.tar.gz" -o bore.tar.gz
         tar -xzf bore.tar.gz
         chmod +x bore
         
         echo "Starting Bore..."
-        # Cek Log step ini untuk melihat URL koneksi (misal: bore.pub:12345)
+        # Cek Log step ini untuk URL. Contoh output: bore.pub:xxxxx
         ./bore local 5900 --to bore.pub
 
     - name: Keep Alive
