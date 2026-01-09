@@ -1,55 +1,54 @@
-name: MacOS VNC Optimization (Bore)
+name: MacOS 15 VNC Optimization (Bore)
 
 on:
   workflow_dispatch:
 
 jobs:
   macos-setup:
-    runs-on: macos-13
+    # Update ke macOS 15 (Apple Silicon/M1/M2)
+    runs-on: macos-15
 
     steps:
     - name: Checkout Source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: System Optimization & VNC Setup
+    - name: System Optimization
       run: |
-        # 1. Disable Power Saving (Supaya tidak sleep)
+        # Disable Sleep & Screensaver
         sudo pmset -a sleep 0
         sudo pmset -a displaysleep 0
         sudo pmset -a screensaver 0
         
-        # 2. UI Performance Tweaks (Mematikan animasi)
+        # Disable UI Animations (Performance)
         defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false
         defaults write NSGlobalDomain NSWindowResizeTime -float 0.001
         defaults write com.apple.finder DisableAllAnimations -bool true
-        defaults write com.apple.dock launchanim -bool false
-        killall Dock
         killall Finder
 
-        # 3. Enable VNC / Remote Desktop (Kickstart)
-        # Ganti "Mypassword!" dengan password yang diinginkan (Max 8 char untuk VNC legacy)
+    - name: Enable VNC (Kickstart)
+      run: |
+        # Mengaktifkan VNC dengan password "Mypassword!"
+        # Perlu diingat: macOS 15 punya security TCC ketat, mungkin ada kendala akses mouse
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on \
           -clientopts -setvnclegacy -vnclegacy yes \
           -clientopts -setvncpw -vncpw "Mypassword!" \
           -restart -agent -privs -all
         
-        echo "VNC Activated on Port 5900"
+        echo "VNC Service Started on Port 5900"
 
     - name: Start Bore Tunnel
       run: |
-        # Download Bore (x86_64 binary works on macOS runners)
+        # Download Bore (versi x86 berjalan via Rosetta di ARM64)
         curl -L "https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-apple-darwin.tar.gz" -o bore.tar.gz
         tar -xzf bore.tar.gz
         chmod +x bore
         
-        echo "Starting Bore Tunnel..."
-        # Menjalankan bore pada port VNC standar (5900)
-        # Output akan muncul di log GitHub Actions
+        echo "Starting Bore..."
+        # Cek Log step ini untuk melihat URL koneksi (misal: bore.pub:12345)
         ./bore local 5900 --to bore.pub
 
     - name: Keep Alive
       if: always()
       run: |
-        # Loop sederhana untuk menjaga session tetap hidup jika bore crash/restart
         while true; do sleep 300; done
