@@ -1,0 +1,55 @@
+name: MacOS VNC Optimization (Bore)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  macos-setup:
+    runs-on: macos-13
+
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v3
+
+    - name: System Optimization & VNC Setup
+      run: |
+        # 1. Disable Power Saving (Supaya tidak sleep)
+        sudo pmset -a sleep 0
+        sudo pmset -a displaysleep 0
+        sudo pmset -a screensaver 0
+        
+        # 2. UI Performance Tweaks (Mematikan animasi)
+        defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false
+        defaults write NSGlobalDomain NSWindowResizeTime -float 0.001
+        defaults write com.apple.finder DisableAllAnimations -bool true
+        defaults write com.apple.dock launchanim -bool false
+        killall Dock
+        killall Finder
+
+        # 3. Enable VNC / Remote Desktop (Kickstart)
+        # Ganti "Mypassword!" dengan password yang diinginkan (Max 8 char untuk VNC legacy)
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+          -activate -configure -access -on \
+          -clientopts -setvnclegacy -vnclegacy yes \
+          -clientopts -setvncpw -vncpw "Mypassword!" \
+          -restart -agent -privs -all
+        
+        echo "VNC Activated on Port 5900"
+
+    - name: Start Bore Tunnel
+      run: |
+        # Download Bore (x86_64 binary works on macOS runners)
+        curl -L "https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-apple-darwin.tar.gz" -o bore.tar.gz
+        tar -xzf bore.tar.gz
+        chmod +x bore
+        
+        echo "Starting Bore Tunnel..."
+        # Menjalankan bore pada port VNC standar (5900)
+        # Output akan muncul di log GitHub Actions
+        ./bore local 5900 --to bore.pub
+
+    - name: Keep Alive
+      if: always()
+      run: |
+        # Loop sederhana untuk menjaga session tetap hidup jika bore crash/restart
+        while true; do sleep 300; done
