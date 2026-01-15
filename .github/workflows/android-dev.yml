@@ -1,0 +1,30 @@
+name: ARM-RDP-Bore
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest-arm64
+    steps:
+      - name: Install Desktop Environment & XRDP
+        run: |
+          sudo apt update
+          # Install XFCE (ringan) & XRDP
+          sudo apt install -y xfce4 xfce4-goodies xrdp
+          # Set password buat user runner (penting buat login RDP)
+          echo "runner:password123" | sudo chpasswd
+          # Konfigurasi XRDP pakai XFCE
+          echo "xfce4-session" > ~/.xsession
+          sudo systemctl restart xrdp
+
+      - name: Install Bore (ARM64 Binary)
+        run: |
+          # Download bore langsung versi ARM64
+          wget https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-aarch64-unknown-linux-musl.tar.gz
+          tar -xf bore-v0.5.1-aarch64-unknown-linux-musl.tar.gz
+          sudo cp bore /usr/local/bin/
+
+      - name: Run Tunnel with Bore
+        run: |
+          # Jalankan bore ke port 3389 (port default RDP)
+          # Ganti 'bore.pub' dengan server bore pilihan lo kalau punya sendiri
+          bore local 3389 --to bore.pub
