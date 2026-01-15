@@ -9,10 +9,21 @@ jobs:
     timeout-minutes: 360
     
     steps:
-      - name: Configure RDP User
+      - name: Enable Remote Desktop & Configure User
+        shell: pwsh
         run: |
-          # Mengubah password user yang sudah ada tanpa menambah baru
+          # 1. Aktifkan Fitur Remote Desktop di Registry
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          
+          # 2. Izinkan RDP melalui Firewall Windows
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          
+          # 3. Matikan NLA (Network Level Authentication) agar koneksi lebih mudah
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+          
+          # 4. Set password dan pastikan akun aktif
           net user runneradmin Password123!
+          net user runneradmin /active:yes
           # development android app
 
       - name: Download and Setup Bore
@@ -25,6 +36,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Starting tunnel for RDP on port 3389..."
+          # Jalankan bore secara background
           Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -NoNewWindow
           # development android app
           
