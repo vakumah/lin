@@ -1,30 +1,39 @@
-name: ARM-RDP-Bore
-on: workflow_dispatch
+name: Windows-ARM-Dev-RDP
+
+on: 
+  workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest-arm64
+  development-android-app:
+    runs-on: windows-11-arm
+    timeout-minutes: 360
+    
     steps:
-      - name: Install Desktop Environment & XRDP
+      - name: Configure RDP User
         run: |
-          sudo apt update
-          # Install XFCE (ringan) & XRDP
-          sudo apt install -y xfce4 xfce4-goodies xrdp
-          # Set password buat user runner (penting buat login RDP)
-          echo "runner:password123" | sudo chpasswd
-          # Konfigurasi XRDP pakai XFCE
-          echo "xfce4-session" > ~/.xsession
-          sudo systemctl restart xrdp
+          net user runneradmin Password123! /add
+          net localgroup administrators runneradmin /add
+          # development android app
 
-      - name: Install Bore (ARM64 Binary)
+      - name: Download and Setup Bore
         run: |
-          # Download bore langsung versi ARM64
-          wget https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-aarch64-unknown-linux-musl.tar.gz
-          tar -xf bore-v0.5.1-aarch64-unknown-linux-musl.tar.gz
-          sudo cp bore /usr/local/bin/
+          Invoke-WebRequest -Uri https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip -OutFile bore.zip
+          Expand-Archive bore.zip -DestinationPath .
+          # Bore will run via x64 emulation on Windows ARM
 
-      - name: Run Tunnel with Bore
+      - name: Start RDP Tunnel
+        shell: pwsh
         run: |
-          # Jalankan bore ke port 3389 (port default RDP)
-          # Ganti 'bore.pub' dengan server bore pilihan lo kalau punya sendiri
-          bore local 3389 --to bore.pub
+          Write-Host "Starting tunnel for RDP on port 3389..."
+          Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -NoNewWindow
+          
+      - name: Keep Live 6 Hours
+        shell: pwsh
+        run: |
+          $startTime = Get-Date
+          $endTime = $startTime.AddHours(6)
+          Write-Host "Keep live started at $startTime. Will run until $endTime."
+          while ((Get-Date) -lt $endTime) {
+            Write-Host "Runner is active... $((Get-Date).ToString())"
+            Start-Sleep -Seconds 60
+          }
