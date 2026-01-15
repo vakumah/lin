@@ -11,21 +11,22 @@ jobs:
     steps:
       - name: Configure RDP User
         run: |
-          net user runneradmin Password123! /add
-          net localgroup administrators runneradmin /add
+          # Mengubah password user yang sudah ada tanpa menambah baru
+          net user runneradmin Password123!
           # development android app
 
       - name: Download and Setup Bore
         run: |
           Invoke-WebRequest -Uri https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip -OutFile bore.zip
           Expand-Archive bore.zip -DestinationPath .
-          # Bore will run via x64 emulation on Windows ARM
+          # development android app
 
       - name: Start RDP Tunnel
         shell: pwsh
         run: |
           Write-Host "Starting tunnel for RDP on port 3389..."
           Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -NoNewWindow
+          # development android app
           
       - name: Keep Live 6 Hours
         shell: pwsh
@@ -37,3 +38,4 @@ jobs:
             Write-Host "Runner is active... $((Get-Date).ToString())"
             Start-Sleep -Seconds 60
           }
+          # development android app
