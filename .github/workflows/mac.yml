@@ -20,45 +20,25 @@ jobs:
           brew install --cask xquartz
           
           # Install VNC server
-          brew install x11vnc tiger-vnc
-          
-          # Install window manager
-          brew install openbox
+          brew install x11vnc
           
           echo "Installation complete!"
           
-      - name: Start Virtual Display
+      - name: Start Virtual Display and VNC
         run: |
           # Source XQuartz
           export PATH="/opt/X11/bin:$PATH"
           export DISPLAY=:1
           
-          # Create virtual X display using Xvfb from XQuartz
+          # Start virtual X display
           /opt/X11/bin/Xvfb :1 -screen 0 1920x1080x24 &
           sleep 3
           
-          echo "Virtual display started!"
+          # Start xterm
+          DISPLAY=:1 /opt/X11/bin/xterm -geometry 120x40+100+100 &
+          sleep 1
           
-      - name: Start Window Manager
-        run: |
-          export PATH="/opt/X11/bin:/opt/homebrew/bin:$PATH"
-          export DISPLAY=:1
-          
-          # Start openbox
-          openbox &
-          sleep 2
-          
-          # Open some apps
-          /opt/X11/bin/xterm &
-          
-          echo "Window manager started!"
-          
-      - name: Start VNC Server
-        run: |
-          export PATH="/opt/X11/bin:/opt/homebrew/bin:$PATH"
-          export DISPLAY=:1
-          
-          # Start x11vnc to share the virtual display
+          # Start x11vnc
           x11vnc -display :1 -forever -shared -nopw -rfbport 5900 &
           sleep 3
           
@@ -77,6 +57,7 @@ jobs:
           echo "🍎 macOS X11 Desktop Ready!"
           echo "📐 Resolution: 1920x1080"
           echo "🔓 No password"
+          echo "📺 Connect to: bore.pub:XXXXX"
           echo "========================================"
           
           ./bore local 5900 --to bore.pub
