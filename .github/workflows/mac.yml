@@ -16,39 +16,35 @@ jobs:
           echo ""
           echo "=== CPU ==="
           sysctl -n machdep.cpu.brand_string || echo "Apple Silicon"
-          echo ""
-          echo "=== Memory ==="
-          system_profiler SPHardwareDataType | grep Memory
           
       - name: Install VNC Server
         run: |
-          # Install TigerVNC via Homebrew
           brew install tiger-vnc
+          echo "$(brew --prefix)/bin" >> $GITHUB_PATH
           
       - name: Setup VNC
         run: |
           mkdir -p ~/.vnc
           
-          # Set VNC password
-          echo "github123" | vncpasswd -f > ~/.vnc/passwd
+          # Use full path for vncpasswd
+          /opt/homebrew/bin/vncpasswd -f <<< "github123" > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
           
-          # Create xstartup (basic - macOS finder)
-          cat > ~/.vnc/xstartup << 'EOF'
-          #!/bin/bash
-          export DISPLAY=:1
-          open -a Finder
-          EOF
+          # Create simple xstartup
+          echo '#!/bin/bash' > ~/.vnc/xstartup
+          echo 'open -a Finder' >> ~/.vnc/xstartup
           chmod +x ~/.vnc/xstartup
           
       - name: Start VNC Server
         run: |
-          # Start VNC with TigerVNC
-          vncserver :1 -geometry 1920x1080 -depth 24 -localhost no || echo "VNC may already be running"
+          /opt/homebrew/bin/vncserver :1 -geometry 1920x1080 -depth 24 -SecurityTypes None &
+          sleep 3
           echo "VNC Server started!"
           
       - name: Download Bore
         run: |
+          # Download bore for ARM macOS
+          curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-aarch64-apple-darwin.tar.gz -o bore.tar.gz || \
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-apple-darwin.tar.gz -o bore.tar.gz
           tar -xzf bore.tar.gz
           chmod +x bore
@@ -56,14 +52,13 @@ jobs:
       - name: Start Tunnel
         run: |
           echo "========================================"
-          echo "🍎 macOS Remote Desktop Ready!"
+          echo "🍎 macOS VNC Ready!"
           echo "========================================"
           echo ""
-          echo "🔑 VNC Password: github123"
-          echo "� Resolution: 1920x1080"
+          echo "🔑 No password (SecurityTypes None)"
+          echo "📐 Resolution: 1920x1080"
           echo ""
           echo "⏳ Starting tunnel..."
-          echo "📺 Connect to: bore.pub:XXXXX"
           echo ""
           echo "========================================"
           
