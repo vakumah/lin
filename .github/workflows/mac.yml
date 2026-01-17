@@ -9,46 +9,51 @@ jobs:
     timeout-minutes: 360
     
     steps:
-      - name: Create VNC User and Enable VNC
+      - name: Setup VNC with tricks
         run: |
-          # Create new admin user for VNC
-          sudo dscl . -create /Users/vncuser
-          sudo dscl . -create /Users/vncuser UserShell /bin/bash
-          sudo dscl . -create /Users/vncuser RealName "VNC User"
-          sudo dscl . -create /Users/vncuser UniqueID 550
-          sudo dscl . -create /Users/vncuser PrimaryGroupID 20
-          sudo dscl . -create /Users/vncuser NFSHomeDirectory /Users/vncuser
-          sudo dscl . -passwd /Users/vncuser "vnc123"
-          sudo dscl . -append /Groups/admin GroupMembership vncuser
+          # Create VNC password file directly
+          mkdir -p ~/Library/Preferences
           
-          # Create home directory
-          sudo mkdir -p /Users/vncuser
-          sudo chown -R vncuser:staff /Users/vncuser
+          # Method: Use sysadminctl to create user
+          sudo sysadminctl -addUser vncuser -password vnc123 -admin
           
-          echo "VNC User created!"
+          echo "User created!"
           
-      - name: Enable Screen Sharing
+      - name: Enable Remote Desktop
         run: |
-          # Enable VNC/Screen Sharing with kickstart
+          # Enable ARD for the new user
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
             -activate \
-            -configure -allowAccessFor -specifiedUsers \
-            -configure -users vncuser -access -on -privs -all \
+            -configure -allowAccessFor -allUsers \
             -configure -clientopts -setvnclegacy -vnclegacy yes \
-            -configure -clientopts -setvncpw -vncpw vnc123 \
             -restart -agent
           
-          sleep 3
+          # Set VNC password via kickstart
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -configure -clientopts -setvncpw -vncpw vnc123
           
-          # Check port
-          lsof -i :5900 || echo "Checking netstat..."
-          netstat -an | grep -E "5900|3283" || true
+          sleep 2
           
-          echo "Screen Sharing enabled!"
+          # Another method - write to preferences
+          echo "vnc123" | sudo tee /etc/vnc_password
           
-      - name: Start Tunnel
+          echo "Remote Desktop enabled!"
+          
+      - name: Check and Start SSH for backup access
         run: |
-          # Download bore
+          # Enable SSH as backup
+          sudo systemsetup -setremotelogin on || true
+          
+          # Check what's running
+          echo "=== Checking ports ==="
+          sudo lsof -i -P | grep -E "5900|22|3283" || true
+          
+      - name: Install tmate for SSH tunnel
+        run: |
+          brew install tmate
+          
+      - name: Start VNC Tunnel
+        run: |
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-aarch64-apple-darwin.tar.gz -o bore.tar.gz || \
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-apple-darwin.tar.gz -o bore.tar.gz
           tar -xzf bore.tar.gz
@@ -56,12 +61,21 @@ jobs:
           
           echo ""
           echo "========================================"
-          echo "🍎 macOS VNC Ready!"
+          echo "🍎 macOS VNC"
           echo "========================================"
           echo "👤 Username: vncuser"
           echo "🔑 Password: vnc123"
-          echo "🔑 VNC Password: vnc123"
-          echo "========================================"
           echo ""
+          echo "If VNC fails, use tmate SSH:"
+          echo "========================================"
           
+          # Start tmate in background for SSH access
+          tmate -F &
+          sleep 5
+          
+          # Show tmate SSH command  
+          tmate show-messages || true
+          
+          echo ""
+          echo "Starting VNC tunnel..."
           ./bore local 5900 --to bore.pub
