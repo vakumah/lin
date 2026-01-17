@@ -1,4 +1,4 @@
-name: macOS Desktop
+name: macOS Desktop VNC
 
 on:
   workflow_dispatch:
@@ -9,53 +9,59 @@ jobs:
     timeout-minutes: 360
     
     steps:
-      - name: Enable VNC without user auth
+      - name: Create VNC User and Enable VNC
         run: |
-          echo "Current user: $(whoami)"
+          # Create new admin user for VNC
+          sudo dscl . -create /Users/vncuser
+          sudo dscl . -create /Users/vncuser UserShell /bin/bash
+          sudo dscl . -create /Users/vncuser RealName "VNC User"
+          sudo dscl . -create /Users/vncuser UniqueID 550
+          sudo dscl . -create /Users/vncuser PrimaryGroupID 20
+          sudo dscl . -create /Users/vncuser NFSHomeDirectory /Users/vncuser
+          sudo dscl . -passwd /Users/vncuser "vnc123"
+          sudo dscl . -append /Groups/admin GroupMembership vncuser
           
-          # Method 1: Try kickstart with VNC-only mode
+          # Create home directory
+          sudo mkdir -p /Users/vncuser
+          sudo chown -R vncuser:staff /Users/vncuser
+          
+          echo "VNC User created!"
+          
+      - name: Enable Screen Sharing
+        run: |
+          # Enable VNC/Screen Sharing with kickstart
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
             -activate \
-            -configure -allowAccessFor -allUsers \
+            -configure -allowAccessFor -specifiedUsers \
+            -configure -users vncuser -access -on -privs -all \
             -configure -clientopts -setvnclegacy -vnclegacy yes \
             -configure -clientopts -setvncpw -vncpw vnc123 \
-            -restart -agent || echo "kickstart failed, trying alternatives..."
-          
-          # Method 2: Write VNC password directly
-          echo "vnc123" | sudo perl -e 'print pack("H*", unpack("H*", <>))' > /tmp/vncpw
-          sudo cp /tmp/vncpw /Library/Preferences/com.apple.VNCSettings.txt 2>/dev/null || true
-          
-          # Method 3: Try enabling via defaults
-          sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStartOnConsole -bool true 2>/dev/null || true
-          sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCPassword -string "vnc123" 2>/dev/null || true
+            -restart -agent
           
           sleep 3
           
-          echo "=== Port Check ==="
-          lsof -i :5900 || echo "Nothing on 5900"
+          # Check port
+          lsof -i :5900 || echo "Checking netstat..."
+          netstat -an | grep -E "5900|3283" || true
           
-      - name: Alternative - Use Xvfb + x11vnc NO AUTH
+          echo "Screen Sharing enabled!"
+          
+      - name: Start Tunnel
         run: |
-          # Install x11vnc
-          brew install x11vnc 2>/dev/null || true
-          
-          # Try x11vnc with no password in rawfb mode pointing to dummy
-          # Create a simple framebuffer
-          x11vnc -create -forever -shared -nopw -rfbport 5900 2>/dev/null &
-          sleep 2
-          
-          lsof -i :5900 || echo "Still nothing"
-          
-      - name: Start Bore
-        run: |
+          # Download bore
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-aarch64-apple-darwin.tar.gz -o bore.tar.gz || \
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-apple-darwin.tar.gz -o bore.tar.gz
           tar -xzf bore.tar.gz
           chmod +x bore
           
+          echo ""
           echo "========================================"
-          echo "🍎 macOS VNC"
-          echo "� Try: vnc123 (or no password)"
+          echo "🍎 macOS VNC Ready!"
           echo "========================================"
+          echo "👤 Username: vncuser"
+          echo "🔑 Password: vnc123"
+          echo "🔑 VNC Password: vnc123"
+          echo "========================================"
+          echo ""
           
           ./bore local 5900 --to bore.pub
