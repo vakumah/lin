@@ -14,41 +14,58 @@ jobs:
           sw_vers
           uname -m
           
-      - name: Install VNC Server
+      - name: Install XQuartz and VNC
         run: |
-          brew install tiger-vnc
+          # Install XQuartz (X11 for macOS)
+          brew install --cask xquartz
           
-          # Find where binaries are installed
-          echo "=== Checking installed binaries ==="
-          ls -la $(brew --prefix tiger-vnc)/bin/ || true
-          ls -la /opt/homebrew/bin/vnc* || true
-          which vncserver || true
+          # Install VNC server
+          brew install x11vnc tiger-vnc
           
-      - name: Setup and Start VNC
+          # Install window manager
+          brew install openbox
+          
+          echo "Installation complete!"
+          
+      - name: Start Virtual Display
         run: |
-          # Add homebrew to path
-          export PATH="$(brew --prefix)/bin:$(brew --prefix tiger-vnc)/bin:$PATH"
+          # Source XQuartz
+          export PATH="/opt/X11/bin:$PATH"
+          export DISPLAY=:1
           
-          mkdir -p ~/.vnc
-          
-          # Try to find and run vncserver
-          VNCSERVER=$(find /opt/homebrew -name "vncserver" 2>/dev/null | head -1)
-          
-          if [ -z "$VNCSERVER" ]; then
-            VNCSERVER=$(brew --prefix tiger-vnc)/bin/vncserver
-          fi
-          
-          echo "Using vncserver: $VNCSERVER"
-          
-          # Start VNC without password (SecurityTypes None)
-          $VNCSERVER :1 -geometry 1920x1080 -depth 24 -SecurityTypes None &
+          # Create virtual X display using Xvfb from XQuartz
+          /opt/X11/bin/Xvfb :1 -screen 0 1920x1080x24 &
           sleep 3
           
-          echo "VNC Server started on :1 (port 5901)"
+          echo "Virtual display started!"
+          
+      - name: Start Window Manager
+        run: |
+          export PATH="/opt/X11/bin:/opt/homebrew/bin:$PATH"
+          export DISPLAY=:1
+          
+          # Start openbox
+          openbox &
+          sleep 2
+          
+          # Open some apps
+          /opt/X11/bin/xterm &
+          
+          echo "Window manager started!"
+          
+      - name: Start VNC Server
+        run: |
+          export PATH="/opt/X11/bin:/opt/homebrew/bin:$PATH"
+          export DISPLAY=:1
+          
+          # Start x11vnc to share the virtual display
+          x11vnc -display :1 -forever -shared -nopw -rfbport 5900 &
+          sleep 3
+          
+          echo "VNC Server started on port 5900!"
           
       - name: Download Bore
         run: |
-          # ARM64 macOS
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-aarch64-apple-darwin.tar.gz -o bore.tar.gz || \
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-apple-darwin.tar.gz -o bore.tar.gz
           tar -xzf bore.tar.gz
@@ -57,9 +74,9 @@ jobs:
       - name: Start Tunnel
         run: |
           echo "========================================"
-          echo "🍎 macOS VNC Ready!"
+          echo "🍎 macOS X11 Desktop Ready!"
           echo "📐 Resolution: 1920x1080"
-          echo "🔓 No password required"
+          echo "🔓 No password"
           echo "========================================"
           
-          ./bore local 5901 --to bore.pub
+          ./bore local 5900 --to bore.pub
