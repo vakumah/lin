@@ -15,46 +15,56 @@ jobs:
           sw_vers
           echo ""
           echo "=== CPU ==="
-          sysctl -n machdep.cpu.brand_string
+          sysctl -n machdep.cpu.brand_string || echo "Apple Silicon"
           echo ""
           echo "=== Memory ==="
           system_profiler SPHardwareDataType | grep Memory
           
-      - name: Enable Screen Sharing (VNC)
+      - name: Install VNC Server
         run: |
+          # Install TigerVNC via Homebrew
+          brew install tiger-vnc
+          
+      - name: Setup VNC
+        run: |
+          mkdir -p ~/.vnc
+          
           # Set VNC password
-          echo "github123" | sudo /usr/bin/dscl . -passwd /Users/runner
+          echo "github123" | vncpasswd -f > ~/.vnc/passwd
+          chmod 600 ~/.vnc/passwd
           
-          # Enable Screen Sharing
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -activate -configure -access -on \
-            -restart -agent -privs -all
+          # Create xstartup (basic - macOS finder)
+          cat > ~/.vnc/xstartup << 'EOF'
+          #!/bin/bash
+          export DISPLAY=:1
+          open -a Finder
+          EOF
+          chmod +x ~/.vnc/xstartup
           
-          # Enable VNC
-          sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
-          sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
-          
-          echo "Screen Sharing enabled!"
+      - name: Start VNC Server
+        run: |
+          # Start VNC with TigerVNC
+          vncserver :1 -geometry 1920x1080 -depth 24 -localhost no || echo "VNC may already be running"
+          echo "VNC Server started!"
           
       - name: Download Bore
         run: |
-          # Download bore for macOS
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-apple-darwin.tar.gz -o bore.tar.gz
           tar -xzf bore.tar.gz
           chmod +x bore
           
-      - name: Start Bore Tunnel
+      - name: Start Tunnel
         run: |
           echo "========================================"
-          echo "🍎 macOS Remote Desktop"
+          echo "🍎 macOS Remote Desktop Ready!"
           echo "========================================"
           echo ""
-          echo "🔑 VNC Password: github123"  
-          echo "👤 Username: runner"
+          echo "🔑 VNC Password: github123"
+          echo "� Resolution: 1920x1080"
           echo ""
-          echo "⏳ Starting tunnel on port 5900..."
-          echo "📺 Look for: bore.pub:XXXXX"
+          echo "⏳ Starting tunnel..."
+          echo "📺 Connect to: bore.pub:XXXXX"
           echo ""
           echo "========================================"
           
-          ./bore local 5900 --to bore.pub
+          ./bore local 5901 --to bore.pub
