@@ -1,53 +1,57 @@
-name: Windows-ARM-Dev-RDP
+name: GNOME Desktop RDP
 
-on: 
+on:
   workflow_dispatch:
 
 jobs:
-  development-android-app:
-    runs-on: windows-11-arm
+  desktop:
+    runs-on: ubuntu-latest
     timeout-minutes: 360
     
     steps:
-      - name: Enable Remote Desktop & Configure User
-        shell: pwsh
+      - name: Install GNOME Desktop
         run: |
-          # 1. Aktifkan Fitur Remote Desktop di Registry
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          sudo apt-get update
+          sudo apt-get install -y ubuntu-desktop gnome-session gdm3 tigervnc-standalone-server dbus-x11
           
-          # 2. Izinkan RDP melalui Firewall Windows
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          
-          # 3. Matikan NLA (Network Level Authentication) agar koneksi lebih mudah
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
-          
-          # 4. Set password dan pastikan akun aktif
-          net user runneradmin Password123!
-          net user runneradmin /active:yes
-          # development android app
-
-      - name: Download and Setup Bore
+      - name: Setup VNC
         run: |
-          Invoke-WebRequest -Uri https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip -OutFile bore.zip
-          Expand-Archive bore.zip -DestinationPath .
-          # development android app
-
-      - name: Start RDP Tunnel
-        shell: pwsh
-        run: |
-          Write-Host "Starting tunnel for RDP on port 3389..."
-          # Jalankan bore secara background
-          Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -NoNewWindow
-          # development android app
+          mkdir -p ~/.vnc
+          echo "github123" | vncpasswd -f > ~/.vnc/passwd
+          chmod 600 ~/.vnc/passwd
           
-      - name: Keep Live 6 Hours
-        shell: pwsh
+          cat > ~/.vnc/xstartup << 'EOF'
+          #!/bin/bash
+          unset SESSION_MANAGER
+          unset DBUS_SESSION_BUS_ADDRESS
+          export DISPLAY=:1
+          export XDG_SESSION_TYPE=x11
+          export GNOME_SHELL_SESSION_MODE=ubuntu
+          
+          eval $(dbus-launch --sh-syntax)
+          
+          gnome-session &
+          EOF
+          
+          chmod +x ~/.vnc/xstartup
+          
+      - name: Start VNC Server
         run: |
-          $startTime = Get-Date
-          $endTime = $startTime.AddHours(6)
-          Write-Host "Keep live started at $startTime. Will run until $endTime."
-          while ((Get-Date) -lt $endTime) {
-            Write-Host "Runner is active... $((Get-Date).ToString())"
-            Start-Sleep -Seconds 60
-          }
-          # development android app
+          vncserver :1 -geometry 1920x1080 -depth 24
+          echo "VNC Server started!"
+          
+      - name: Setup Bore Tunnel
+        run: |
+          wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          
+          echo "========================================"
+          echo "🔑 VNC Password: github123"
+          echo "📐 Resolution: 1920x1080"
+          echo "🖥️  Desktop: GNOME"
+          echo "========================================"
+          echo ""
+          echo "⏳ Starting tunnel... Look for bore.pub:XXXXX"
+          echo ""
+          
+          ./bore local 5901 --to bore.pub
