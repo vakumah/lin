@@ -9,63 +9,49 @@ jobs:
     timeout-minutes: 360
     
     steps:
-      - name: System Info
+      - name: Setup User Password and VNC
         run: |
-          sw_vers
-          uname -m
+          # Get current username
+          echo "Current user: $(whoami)"
           
-      - name: Setup macOS Screen Sharing via VNC
-        run: |
-          # Enable Remote Management & Screen Sharing
+          # Set password for current user
+          sudo dscl . -passwd /Users/$(whoami) "" "mac123"
+          
+          # Enable Remote Management with VNC
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -activate -configure -access -on \
-            -clientopts -setvnclegacy -vnclegacy yes \
-            -clientopts -setvncpw -vncpw github123 \
-            -restart -agent -privs -all || echo "kickstart might need different args"
+            -activate \
+            -configure -allowAccessFor -allUsers \
+            -configure -clientopts -setvnclegacy -vnclegacy yes \
+            -configure -clientopts -setvncpw -vncpw mac123 \
+            -restart -agent
           
-          # Alternative: Enable screen sharing differently  
-          sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false 2>/dev/null || true
-          sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
-          
-          # Check what's listening
-          echo "=== Checking ports ==="
-          lsof -i :5900 || echo "Nothing on 5900 yet"
-          
-      - name: Try TightVNC approach
-        run: |
-          # Install tightvnc via brew if available
-          brew install tightvnc 2>/dev/null || echo "tightvnc not available"
-          
-          # Or try running x11vnc with rawfb for macOS screen
-          brew install x11vnc 2>/dev/null || true
-          
-          # Try capturing macOS screen with x11vnc in rawfb mode
-          x11vnc -rawfb map:/dev/null@1920x1080x32:ff/ff00/ff0000 -nopw -forever -rfbport 5900 &
-          sleep 3
-          
-          # Or use macOS built-in VNC
-          # Sometimes it binds to 5900 after enabling
-          lsof -i :5900 || echo "Still nothing on 5900"
-          
-      - name: Use ngrok instead of bore (more compatible)
-        run: |
-          # Download ngrok
-          curl -sL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-arm64.zip -o ngrok.zip || \
-          curl -sL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-amd64.zip -o ngrok.zip
-          unzip -o ngrok.zip
-          
-          echo "========================================"
-          echo "🍎 macOS Remote Access"
-          echo "� VNC Password: github123"
           echo ""
-          echo "If VNC doesn't work on macOS runner,"
-          echo "consider using Linux workflow instead."
+          echo "========================================"
+          echo "🍎 macOS VNC Credentials"
+          echo "========================================"
+          echo "👤 Username: $(whoami)"
+          echo "🔑 Password: mac123"
+          echo "🔑 VNC Password: mac123"
           echo "========================================"
           
-          # Try bore first
+      - name: Check VNC Port
+        run: |
+          sleep 3
+          echo "Checking port 5900..."
+          lsof -i :5900 || echo "Nothing on 5900"
+          netstat -an | grep 5900 || true
+          
+      - name: Start Bore Tunnel
+        run: |
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-aarch64-apple-darwin.tar.gz -o bore.tar.gz || \
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-apple-darwin.tar.gz -o bore.tar.gz
           tar -xzf bore.tar.gz
           chmod +x bore
+          
+          echo "========================================"
+          echo "🍎 macOS VNC Ready!"
+          echo "👤 Username: $(whoami)"
+          echo "🔑 Password: mac123"
+          echo "========================================"
           
           ./bore local 5900 --to bore.pub
