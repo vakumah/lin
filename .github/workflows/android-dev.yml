@@ -70,20 +70,15 @@ jobs:
         open -a "System Preferences"
         sleep 2
         
-        # Create window so there's something to see
-        osascript <<'EOF'
-        tell application "Finder"
-            activate
-            make new Finder window
-            set bounds of front window to {0, 0, 800, 600}
-        end tell
+        # Create Finder window
+        osascript -e 'tell application "Finder" to activate' \
+                  -e 'tell application "Finder" to make new Finder window' \
+                  -e 'tell application "Finder" to set bounds of front window to {0, 0, 800, 600}'
         
-        tell application "TextEdit"
-            activate
-            make new document
-            set text of front document to "VNC Connected Successfully! 🎉"
-        end tell
-EOF
+        # Create TextEdit document with message
+        osascript -e 'tell application "TextEdit" to activate' \
+                  -e 'tell application "TextEdit" to make new document' \
+                  -e 'tell application "TextEdit" to set text of front document to "VNC Connected Successfully!"'
         
         # Set wallpaper
         osascript -e 'tell application "Finder" to set desktop picture to POSIX file "/System/Library/Desktop Pictures/Solid Colors/Teal.png"' || true
