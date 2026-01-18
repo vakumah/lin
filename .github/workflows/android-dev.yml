@@ -1,4 +1,4 @@
-name: macOS noVNC with Bore
+name: macOS noVNC with Bore (No Auth)
 
 on:
   workflow_dispatch:
@@ -31,23 +31,32 @@ jobs:
         
         echo "Sleep mode disabled"
 
-    - name: Enable macOS Screen Sharing (VNC) - No Password
+    - name: Setup VNC Server (No Authentication)
       run: |
-        # Enable Remote Management with VNC - NO AUTHENTICATION
-        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-          -activate -configure -access -on \
-          -clientopts -setvnclegacy -vnclegacy yes \
-          -restart -agent -privs -all
+        # Install x11vnc via Homebrew (supports no-auth)
+        brew install x11vnc
         
-        # Allow all users without password
-        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-          -configure -allowAccessFor -allUsers
+        # Start x11vnc without password on port 5900
+        # -nopw = no password
+        # -forever = don't exit after first client disconnects
+        # -shared = allow multiple connections
+        # -rfbport = VNC port
+        # -bg = run in background
+        x11vnc -nopw -forever -shared -rfbport 5900 -bg -o /tmp/x11vnc.log 2>&1 || {
+          echo "x11vnc failed, trying built-in VNC..."
+          
+          # Fallback: Enable built-in Screen Sharing
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate -configure -access -on \
+            -clientopts -setvnclegacy -vnclegacy yes \
+            -restart -agent -privs -all
+          
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -configure -allowAccessFor -allUsers
+        }
         
-        # Disable VNC password requirement
-        sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStartOnConsole -bool true
-        sudo defaults write /Library/Preferences/com.apple.RemoteManagement LoadRemoteManagementMenuExtra -bool false
-        
-        echo "VNC Server enabled - NO PASSWORD REQUIRED"
+        sleep 2
+        echo "VNC Server started - NO PASSWORD"
 
     - name: Install noVNC & websockify
       run: |
@@ -74,13 +83,8 @@ jobs:
         # Start websockify to bridge WebSocket (6080) to VNC (5900)
         cd ~/noVNC
         
-        # Try novnc_proxy first (it bundles websockify)
-        if [ -f "./utils/novnc_proxy" ]; then
-          ./utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
-        else
-          # Fallback to websockify directly
-          ~/.local/bin/websockify --web ~/noVNC 6080 localhost:5900 &
-        fi
+        # Start noVNC proxy
+        ~/.local/bin/websockify --web ~/noVNC 6080 localhost:5900 &
         
         # Wait for server to start
         sleep 5
@@ -89,7 +93,7 @@ jobs:
         if lsof -i :6080 > /dev/null 2>&1; then
           echo "✅ noVNC server running on port 6080"
         else
-          echo "Trying alternative start method..."
+          echo "Trying alternative..."
           python3 -m websockify --web ~/noVNC 6080 localhost:5900 &
           sleep 3
         fi
@@ -152,6 +156,13 @@ jobs:
         echo "Access via browser using the bore.pub URL above"
         echo ""
         
+        # Show x11vnc log if exists
+        if [ -f /tmp/x11vnc.log ]; then
+          echo "=== x11vnc Log ==="
+          cat /tmp/x11vnc.log
+          echo "=================="
+        fi
+        
         # Keep workflow alive
         COUNTER=0
         while true; do
@@ -161,8 +172,8 @@ jobs:
           # Check if noVNC is still running
           if ! lsof -i :6080 > /dev/null 2>&1; then
             echo "⚠️ noVNC stopped, restarting..."
-            cd ~/noVNC
-            ./utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
+            export PATH="$HOME/.local/bin:$PATH"
+            ~/.local/bin/websockify --web ~/noVNC 6080 localhost:5900 &
             sleep 3
           fi
           
