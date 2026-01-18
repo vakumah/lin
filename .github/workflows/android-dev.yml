@@ -47,11 +47,15 @@ jobs:
 
     - name: Install noVNC & websockify
       run: |
-        # Install dependencies via Homebrew
-        brew install python3 node npm
+        # Install pipx untuk manage Python packages
+        brew install pipx
+        pipx ensurepath
         
-        # Install websockify (WebSocket to TCP proxy)
-        pip3 install websockify
+        # Install websockify via pipx
+        pipx install websockify
+        
+        # Add pipx bin to PATH
+        export PATH="$HOME/.local/bin:$PATH"
         
         # Clone noVNC
         git clone https://github.com/novnc/noVNC.git ~/noVNC
@@ -60,9 +64,19 @@ jobs:
 
     - name: Start noVNC Server
       run: |
+        # Add pipx bin to PATH
+        export PATH="$HOME/.local/bin:$PATH"
+        
         # Start websockify to bridge WebSocket (6080) to VNC (5900)
         cd ~/noVNC
-        ./utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
+        
+        # Try novnc_proxy first (it bundles websockify)
+        if [ -f "./utils/novnc_proxy" ]; then
+          ./utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
+        else
+          # Fallback to websockify directly
+          ~/.local/bin/websockify --web ~/noVNC 6080 localhost:5900 &
+        fi
         
         # Wait for server to start
         sleep 5
@@ -71,8 +85,8 @@ jobs:
         if lsof -i :6080 > /dev/null 2>&1; then
           echo "✅ noVNC server running on port 6080"
         else
-          echo "⚠️ noVNC might not be running, trying alternative..."
-          websockify --web ~/noVNC 6080 localhost:5900 &
+          echo "Trying alternative start method..."
+          python3 -m websockify --web ~/noVNC 6080 localhost:5900 &
           sleep 3
         fi
 
