@@ -16,6 +16,45 @@ jobs:
         defaults write com.apple.dock "show-process-indicators" -bool false
         killall Dock
 
+    - name: Disable Screen Saver & Sleep (Fix Black Screen)
+      run: |
+        # Disable screen saver
+        defaults -currentHost write com.apple.screensaver idleTime 0
+        
+        # Disable sleep mode
+        sudo pmset -a sleep 0
+        sudo pmset -a hibernatemode 0
+        sudo pmset -a disablesleep 1
+        sudo pmset -a displaysleep 0
+        
+        # Disable screen lock
+        defaults write com.apple.screensaver askForPassword -int 0
+        
+        # Start caffeinate untuk keep display awake
+        caffeinate -d -i -s &
+        
+        echo "Screen saver dan sleep mode dinonaktifkan"
+
+    - name: Setup Virtual Display
+      run: |
+        # Simulasi display untuk headless environment
+        # Ini penting agar VNC tidak menampilkan layar hitam
+        
+        # Wake up display
+        sudo pmset displaysleepnow || true
+        sleep 2
+        
+        # Kirim keyboard event untuk membangunkan screen
+        osascript -e 'tell application "System Events" to keystroke " "'
+        
+        # Open Finder untuk memastikan GUI aktif
+        osascript -e 'tell application "Finder" to activate'
+        
+        # Set wallpaper agar tidak hitam (opsional)
+        osascript -e 'tell application "Finder" to set desktop picture to POSIX file "/System/Library/Desktop Pictures/Solid Colors/Teal.png"'
+        
+        echo "Virtual display disetup"
+
     - name: Enable macOS Screen Sharing (VNC)
       run: |
         # Mengaktifkan Remote Management dan menetapkan password VNC
