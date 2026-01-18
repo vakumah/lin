@@ -54,37 +54,37 @@ jobs:
 
     - name: Setup Virtual Display & Wake Screen
       run: |
-        # Caffeinate harus jalan terus
+        # Caffeinate harus jalan terus (keep display awake)
         caffeinate -d -i -s -u &
         
-        # Wake display dengan pmset
-        sudo pmset -a womp 1
-        sudo pmset wake 1
+        # Wake display dengan pmset (menggunakan opsi yang valid)
+        sudo pmset -a womp 1 2>/dev/null || true
+        sudo pmset -a ttyskeepawake 1 2>/dev/null || true
         
-        # Unlock screen
-        osascript -e 'tell application "System Events" to keystroke return'
+        # Unlock screen dengan keystroke
+        osascript -e 'tell application "System Events" to keystroke return' 2>/dev/null || true
         sleep 1
         
         # Force Desktop to load
         open -a Finder
-        open -a "System Preferences"
+        open -a "System Preferences" 2>/dev/null || open -a "System Settings" 2>/dev/null || true
         sleep 2
         
         # Create Finder window
         osascript -e 'tell application "Finder" to activate' \
                   -e 'tell application "Finder" to make new Finder window' \
-                  -e 'tell application "Finder" to set bounds of front window to {0, 0, 800, 600}'
+                  -e 'tell application "Finder" to set bounds of front window to {0, 0, 800, 600}' 2>/dev/null || true
         
         # Create TextEdit document with message
         osascript -e 'tell application "TextEdit" to activate' \
                   -e 'tell application "TextEdit" to make new document' \
-                  -e 'tell application "TextEdit" to set text of front document to "VNC Connected Successfully!"'
+                  -e 'tell application "TextEdit" to set text of front document to "VNC Connected Successfully!"' 2>/dev/null || true
         
         # Set wallpaper
-        osascript -e 'tell application "Finder" to set desktop picture to POSIX file "/System/Library/Desktop Pictures/Solid Colors/Teal.png"' || true
+        osascript -e 'tell application "Finder" to set desktop picture to POSIX file "/System/Library/Desktop Pictures/Solid Colors/Teal.png"' 2>/dev/null || true
         
         # Screenshot untuk force render (penting!)
-        screencapture -x /tmp/screen.png
+        screencapture -x /tmp/screen.png 2>/dev/null || true
         
         echo "Display setup complete"
 
