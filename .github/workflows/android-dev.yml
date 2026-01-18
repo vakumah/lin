@@ -31,19 +31,23 @@ jobs:
         
         echo "Sleep mode disabled"
 
-    - name: Enable macOS Screen Sharing (VNC)
+    - name: Enable macOS Screen Sharing (VNC) - No Password
       run: |
-        # Set VNC password
-        VNC_PASSWORD="p@ssw0rd!"
-        
-        # Enable Remote Management with VNC
+        # Enable Remote Management with VNC - NO AUTHENTICATION
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on \
           -clientopts -setvnclegacy -vnclegacy yes \
-          -clientopts -setvncpw -vncpw "$VNC_PASSWORD" \
           -restart -agent -privs -all
         
-        echo "VNC Server enabled with password: $VNC_PASSWORD"
+        # Allow all users without password
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+          -configure -allowAccessFor -allUsers
+        
+        # Disable VNC password requirement
+        sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStartOnConsole -bool true
+        sudo defaults write /Library/Preferences/com.apple.RemoteManagement LoadRemoteManagementMenuExtra -bool false
+        
+        echo "VNC Server enabled - NO PASSWORD REQUIRED"
 
     - name: Install noVNC & websockify
       run: |
@@ -99,25 +103,40 @@ jobs:
         chmod +x bore
         
         # Start bore tunnel for noVNC (port 6080)
-        ./bore local 6080 --to bore.pub &
+        ./bore local 6080 --to bore.pub 2>&1 | tee bore.log &
         BORE_PID=$!
         
-        # Wait for bore to connect and show the URL
+        # Wait for bore to connect and get the port
         sleep 10
         
+        # Extract port from bore output
+        BORE_PORT=$(grep -oE 'bore\.pub:[0-9]+' bore.log | head -1 | cut -d: -f2)
+        
         echo ""
-        echo "╔══════════════════════════════════════════════════════════════╗"
-        echo "║                   🖥️  noVNC ACCESS INFO                      ║"
-        echo "╠══════════════════════════════════════════════════════════════╣"
-        echo "║  Lihat log di atas untuk URL bore.pub:PORT                   ║"
-        echo "║  Buka URL tersebut di browser!                               ║"
-        echo "║                                                              ║"
-        echo "║  VNC Password: p@ssw0rd!                                     ║"
-        echo "║                                                              ║"
-        echo "║  Contoh: http://bore.pub:12345/vnc.html                      ║"
-        echo "║  (ganti 12345 dengan port dari log bore)                     ║"
-        echo "╚══════════════════════════════════════════════════════════════╝"
+        echo "╔═══════════════════════════════════════════════════════════════════════════╗"
+        echo "║                        🖥️  noVNC ACCESS INFO                              ║"
+        echo "╠═══════════════════════════════════════════════════════════════════════════╣"
+        echo "║                                                                           ║"
+        echo "║  📌 URL (copy ke browser):                                                ║"
+        echo "║                                                                           ║"
+        if [ -n "$BORE_PORT" ]; then
+        echo "║  http://bore.pub:$BORE_PORT/vnc.html?autoconnect=true&encrypt=false        ║"
+        else
+        echo "║  Cek log di atas untuk port, lalu buka:                                   ║"
+        echo "║  http://bore.pub:PORT/vnc.html?autoconnect=true&encrypt=false             ║"
+        fi
+        echo "║                                                                           ║"
+        echo "║  ✅ NO PASSWORD - langsung connect!                                       ║"
+        echo "║                                                                           ║"
+        echo "║  ⚠️  Kalau error, coba: http://bore.pub:PORT/vnc_lite.html                ║"
+        echo "║                                                                           ║"
+        echo "╚═══════════════════════════════════════════════════════════════════════════╝"
         echo ""
+        
+        # Show bore log for reference
+        echo "=== Bore Log ==="
+        cat bore.log
+        echo "================"
 
     - name: Open Desktop Apps (for visibility)
       run: |
