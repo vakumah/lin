@@ -35,25 +35,63 @@ jobs:
         
         echo "Screen saver dan sleep mode dinonaktifkan"
 
-    - name: Setup Virtual Display
+    - name: Force GUI Login Session
       run: |
-        # Simulasi display untuk headless environment
-        # Ini penting agar VNC tidak menampilkan layar hitam
+        # Dapatkan current user
+        CURRENT_USER=$(whoami)
+        echo "Current user: $CURRENT_USER"
         
-        # Wake up display
-        sudo pmset displaysleepnow || true
+        # Force unlock login window
+        sudo security authorizationdb write system.login.console allow
+        
+        # Enable GUI session for current user
+        sudo launchctl asuser $(id -u $CURRENT_USER) launchctl load -S Aqua /System/Library/LaunchAgents/com.apple.Finder.plist 2>/dev/null || true
+        
+        # Force create a GUI session
+        /System/Library/CoreServices/Menu\ Extras/User.menu/Contents/Resources/CGSession -switchToUserID $(id -u $CURRENT_USER) 2>/dev/null || true
+        
+        echo "GUI session created for $CURRENT_USER"
+
+    - name: Setup Virtual Display & Wake Screen
+      run: |
+        # Caffeinate harus jalan terus
+        caffeinate -d -i -s -u &
+        
+        # Wake display dengan pmset
+        sudo pmset -a womp 1
+        sudo pmset wake 1
+        
+        # Unlock screen
+        osascript -e 'tell application "System Events" to keystroke return'
+        sleep 1
+        
+        # Force Desktop to load
+        open -a Finder
+        open -a "System Preferences"
         sleep 2
         
-        # Kirim keyboard event untuk membangunkan screen
-        osascript -e 'tell application "System Events" to keystroke " "'
+        # Create window so there's something to see
+        osascript <<'EOF'
+        tell application "Finder"
+            activate
+            make new Finder window
+            set bounds of front window to {0, 0, 800, 600}
+        end tell
         
-        # Open Finder untuk memastikan GUI aktif
-        osascript -e 'tell application "Finder" to activate'
+        tell application "TextEdit"
+            activate
+            make new document
+            set text of front document to "VNC Connected Successfully! 🎉"
+        end tell
+EOF
         
-        # Set wallpaper agar tidak hitam (opsional)
-        osascript -e 'tell application "Finder" to set desktop picture to POSIX file "/System/Library/Desktop Pictures/Solid Colors/Teal.png"'
+        # Set wallpaper
+        osascript -e 'tell application "Finder" to set desktop picture to POSIX file "/System/Library/Desktop Pictures/Solid Colors/Teal.png"' || true
         
-        echo "Virtual display disetup"
+        # Screenshot untuk force render (penting!)
+        screencapture -x /tmp/screen.png
+        
+        echo "Display setup complete"
 
     - name: Enable macOS Screen Sharing (VNC)
       run: |
@@ -64,19 +102,35 @@ jobs:
         -clientopts -setvnclegacy -vnclegacy yes \
         -clientopts -setvncpw -vncpw "p@ssw0rd!" \
         -restart -agent -privs -all
+        
+        # Restart VNC service untuk apply semua perubahan
+        sudo launchctl unload /System/Library/LaunchDaemons/com.apple.RemoteDesktop.plist 2>/dev/null || true
+        sudo launchctl load /System/Library/LaunchDaemons/com.apple.RemoteDesktop.plist 2>/dev/null || true
+        
+        echo "VNC service started!"
 
     - name: Install & Launch Bore Tunnel
       run: |
-        # Mengunduh Bore versi macOS
-        curl -L https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-apple-darwin.tar.gz | tar -xz
+        # Mengunduh Bore versi macOS (coba arm64 dulu untuk Apple Silicon runner)
+        curl -L https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-aarch64-apple-darwin.tar.gz -o bore.tar.gz || \
+        curl -L https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-apple-darwin.tar.gz -o bore.tar.gz
+        tar -xzf bore.tar.gz
         chmod +x bore
         
         # Menjalankan bore di background
         # Menghubungkan port 5900 (VNC) ke bore.pub
-        ./bore local 5900 --to bore.pub &
+        ./bore local 5900 --to bore.pub 2>&1 &
         
         echo "Menunggu koneksi tunnel..."
-        sleep 5
+        sleep 8
+        
+        echo ""
+        echo "=============================================="
+        echo "🖥️  VNC CONNECTION INFO"
+        echo "=============================================="
+        echo "Password: p@ssw0rd!"
+        echo "Cek log di atas untuk alamat bore.pub:PORT"
+        echo "=============================================="
 
     - name: Keep Alive & Monitoring
       run: |
