@@ -1,22 +1,21 @@
-name: macOS VNC Optimization with Bore
+name: macOS noVNC with Bore
 
 on:
   workflow_dispatch:
 
 jobs:
-  macos-vnc-setup:
+  macos-novnc-setup:
     runs-on: macos-latest
 
     steps:
-    - name: System Tuning & Visual Optimization
+    - name: System Info
       run: |
-        # Mematikan animasi sistem agar lebih responsif di koneksi lambat
-        defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false
-        defaults write com.apple.dock expose-animation-duration -float 0.1
-        defaults write com.apple.dock "show-process-indicators" -bool false
-        killall Dock
+        echo "=== System Info ==="
+        sw_vers
+        echo "User: $(whoami)"
+        echo "==================="
 
-    - name: Disable Screen Saver & Sleep (Fix Black Screen)
+    - name: Disable Screen Saver & Sleep
       run: |
         # Disable screen saver
         defaults -currentHost write com.apple.screensaver idleTime 0
@@ -27,118 +26,119 @@ jobs:
         sudo pmset -a disablesleep 1
         sudo pmset -a displaysleep 0
         
-        # Disable screen lock
-        defaults write com.apple.screensaver askForPassword -int 0
-        
-        # Start caffeinate untuk keep display awake
+        # Keep system awake
         caffeinate -d -i -s &
         
-        echo "Screen saver dan sleep mode dinonaktifkan"
-
-    - name: Force GUI Login Session
-      run: |
-        # Dapatkan current user
-        CURRENT_USER=$(whoami)
-        echo "Current user: $CURRENT_USER"
-        
-        # Force unlock login window
-        sudo security authorizationdb write system.login.console allow
-        
-        # Enable GUI session for current user
-        sudo launchctl asuser $(id -u $CURRENT_USER) launchctl load -S Aqua /System/Library/LaunchAgents/com.apple.Finder.plist 2>/dev/null || true
-        
-        # Force create a GUI session
-        /System/Library/CoreServices/Menu\ Extras/User.menu/Contents/Resources/CGSession -switchToUserID $(id -u $CURRENT_USER) 2>/dev/null || true
-        
-        echo "GUI session created for $CURRENT_USER"
-
-    - name: Setup Virtual Display & Wake Screen
-      run: |
-        # Caffeinate harus jalan terus (keep display awake)
-        caffeinate -d -i -s -u &
-        
-        # Wake display dengan pmset (menggunakan opsi yang valid)
-        sudo pmset -a womp 1 2>/dev/null || true
-        sudo pmset -a ttyskeepawake 1 2>/dev/null || true
-        
-        # Unlock screen dengan keystroke
-        osascript -e 'tell application "System Events" to keystroke return' 2>/dev/null || true
-        sleep 1
-        
-        # Force Desktop to load
-        open -a Finder
-        open -a "System Preferences" 2>/dev/null || open -a "System Settings" 2>/dev/null || true
-        sleep 2
-        
-        # Create Finder window
-        osascript -e 'tell application "Finder" to activate' \
-                  -e 'tell application "Finder" to make new Finder window' \
-                  -e 'tell application "Finder" to set bounds of front window to {0, 0, 800, 600}' 2>/dev/null || true
-        
-        # Create TextEdit document with message
-        osascript -e 'tell application "TextEdit" to activate' \
-                  -e 'tell application "TextEdit" to make new document' \
-                  -e 'tell application "TextEdit" to set text of front document to "VNC Connected Successfully!"' 2>/dev/null || true
-        
-        # Set wallpaper
-        osascript -e 'tell application "Finder" to set desktop picture to POSIX file "/System/Library/Desktop Pictures/Solid Colors/Teal.png"' 2>/dev/null || true
-        
-        # Screenshot untuk force render (penting!)
-        screencapture -x /tmp/screen.png 2>/dev/null || true
-        
-        echo "Display setup complete"
+        echo "Sleep mode disabled"
 
     - name: Enable macOS Screen Sharing (VNC)
       run: |
-        # Mengaktifkan Remote Management dan menetapkan password VNC
-        # Ganti "p@ssw0rd!" jika diperlukan
+        # Set VNC password
+        VNC_PASSWORD="p@ssw0rd!"
+        
+        # Enable Remote Management with VNC
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-        -activate -configure -access -on \
-        -clientopts -setvnclegacy -vnclegacy yes \
-        -clientopts -setvncpw -vncpw "p@ssw0rd!" \
-        -restart -agent -privs -all
+          -activate -configure -access -on \
+          -clientopts -setvnclegacy -vnclegacy yes \
+          -clientopts -setvncpw -vncpw "$VNC_PASSWORD" \
+          -restart -agent -privs -all
         
-        # Restart VNC service untuk apply semua perubahan
-        sudo launchctl unload /System/Library/LaunchDaemons/com.apple.RemoteDesktop.plist 2>/dev/null || true
-        sudo launchctl load /System/Library/LaunchDaemons/com.apple.RemoteDesktop.plist 2>/dev/null || true
+        echo "VNC Server enabled with password: $VNC_PASSWORD"
+
+    - name: Install noVNC & websockify
+      run: |
+        # Install dependencies via Homebrew
+        brew install python3 node npm
         
-        echo "VNC service started!"
+        # Install websockify (WebSocket to TCP proxy)
+        pip3 install websockify
+        
+        # Clone noVNC
+        git clone https://github.com/novnc/noVNC.git ~/noVNC
+        
+        echo "noVNC installed"
+
+    - name: Start noVNC Server
+      run: |
+        # Start websockify to bridge WebSocket (6080) to VNC (5900)
+        cd ~/noVNC
+        ./utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
+        
+        # Wait for server to start
+        sleep 5
+        
+        # Verify it's running
+        if lsof -i :6080 > /dev/null 2>&1; then
+          echo "✅ noVNC server running on port 6080"
+        else
+          echo "⚠️ noVNC might not be running, trying alternative..."
+          websockify --web ~/noVNC 6080 localhost:5900 &
+          sleep 3
+        fi
 
     - name: Install & Launch Bore Tunnel
       run: |
-        # Mengunduh Bore versi macOS (coba arm64 dulu untuk Apple Silicon runner)
-        curl -L https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-aarch64-apple-darwin.tar.gz -o bore.tar.gz || \
+        # Download Bore for macOS
+        curl -L https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-aarch64-apple-darwin.tar.gz -o bore.tar.gz 2>/dev/null || \
         curl -L https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-apple-darwin.tar.gz -o bore.tar.gz
         tar -xzf bore.tar.gz
         chmod +x bore
         
-        # Menjalankan bore di background
-        # Menghubungkan port 5900 (VNC) ke bore.pub
-        ./bore local 5900 --to bore.pub 2>&1 &
+        # Start bore tunnel for noVNC (port 6080)
+        ./bore local 6080 --to bore.pub &
+        BORE_PID=$!
         
-        echo "Menunggu koneksi tunnel..."
-        sleep 8
+        # Wait for bore to connect and show the URL
+        sleep 10
         
         echo ""
-        echo "=============================================="
-        echo "🖥️  VNC CONNECTION INFO"
-        echo "=============================================="
-        echo "Password: p@ssw0rd!"
-        echo "Cek log di atas untuk alamat bore.pub:PORT"
-        echo "=============================================="
+        echo "╔══════════════════════════════════════════════════════════════╗"
+        echo "║                   🖥️  noVNC ACCESS INFO                      ║"
+        echo "╠══════════════════════════════════════════════════════════════╣"
+        echo "║  Lihat log di atas untuk URL bore.pub:PORT                   ║"
+        echo "║  Buka URL tersebut di browser!                               ║"
+        echo "║                                                              ║"
+        echo "║  VNC Password: p@ssw0rd!                                     ║"
+        echo "║                                                              ║"
+        echo "║  Contoh: http://bore.pub:12345/vnc.html                      ║"
+        echo "║  (ganti 12345 dengan port dari log bore)                     ║"
+        echo "╚══════════════════════════════════════════════════════════════╝"
+        echo ""
+
+    - name: Open Desktop Apps (for visibility)
+      run: |
+        # Open some apps so there's something to see
+        open -a Finder &
+        open -a Safari &
+        sleep 2
+        echo "Desktop apps opened"
 
     - name: Keep Alive & Monitoring
       run: |
-        echo "macOS VNC sedang berjalan!"
-        echo "Gunakan aplikasi VNC Viewer (seperti RealVNC atau Screen Sharing)"
-        echo "Alamat IP/Host akan muncul di log di atas pada bagian Bore."
+        echo "🖥️ noVNC server is running!"
+        echo "Access via browser using the bore.pub URL above"
+        echo ""
         
-        # Loop untuk menjaga workflow tetap hidup
+        # Keep workflow alive
+        COUNTER=0
         while true; do
-          ps aux | grep bore | grep -v grep > /dev/null
-          if [ $? -ne 0 ]; then
-            echo "Bore terputus, mencoba menghubungkan kembali..."
-            ./bore local 5900 --to bore.pub &
+          COUNTER=$((COUNTER + 1))
+          echo "[$COUNTER] Session active... ($(date))"
+          
+          # Check if noVNC is still running
+          if ! lsof -i :6080 > /dev/null 2>&1; then
+            echo "⚠️ noVNC stopped, restarting..."
+            cd ~/noVNC
+            ./utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
+            sleep 3
           fi
+          
+          # Check if bore is still running
+          if ! pgrep -x bore > /dev/null; then
+            echo "⚠️ Bore stopped, restarting..."
+            ./bore local 6080 --to bore.pub &
+            sleep 5
+          fi
+          
           sleep 300
         done
