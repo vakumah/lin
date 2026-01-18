@@ -1,57 +1,56 @@
-name: GNOME Desktop RDP
+name: macOS VNC Optimization with Bore
 
 on:
   workflow_dispatch:
 
 jobs:
-  desktop:
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    
+  macos-vnc-setup:
+    runs-on: macos-latest
+
     steps:
-      - name: Install GNOME Desktop
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ubuntu-desktop gnome-session gdm3 tigervnc-standalone-server dbus-x11
-          
-      - name: Setup VNC
-        run: |
-          mkdir -p ~/.vnc
-          echo "github123" | vncpasswd -f > ~/.vnc/passwd
-          chmod 600 ~/.vnc/passwd
-          
-          cat > ~/.vnc/xstartup << 'EOF'
-          #!/bin/bash
-          unset SESSION_MANAGER
-          unset DBUS_SESSION_BUS_ADDRESS
-          export DISPLAY=:1
-          export XDG_SESSION_TYPE=x11
-          export GNOME_SHELL_SESSION_MODE=ubuntu
-          
-          eval $(dbus-launch --sh-syntax)
-          
-          gnome-session &
-          EOF
-          
-          chmod +x ~/.vnc/xstartup
-          
-      - name: Start VNC Server
-        run: |
-          vncserver :1 -geometry 1920x1080 -depth 24
-          echo "VNC Server started!"
-          
-      - name: Setup Bore Tunnel
-        run: |
-          wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
-          
-          echo "========================================"
-          echo "🔑 VNC Password: github123"
-          echo "📐 Resolution: 1920x1080"
-          echo "🖥️  Desktop: GNOME"
-          echo "========================================"
-          echo ""
-          echo "⏳ Starting tunnel... Look for bore.pub:XXXXX"
-          echo ""
-          
-          ./bore local 5901 --to bore.pub
+    - name: System Tuning & Visual Optimization
+      run: |
+        # Mematikan animasi sistem agar lebih responsif di koneksi lambat
+        defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false
+        defaults write com.apple.dock expose-animation-duration -float 0.1
+        defaults write com.apple.dock "show-process-indicators" -bool false
+        killall Dock
+
+    - name: Enable macOS Screen Sharing (VNC)
+      run: |
+        # Mengaktifkan Remote Management dan menetapkan password VNC
+        # Ganti "p@ssw0rd!" jika diperlukan
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+        -activate -configure -access -on \
+        -clientopts -setvnclegacy -vnclegacy yes \
+        -clientopts -setvncpw -vncpw "p@ssw0rd!" \
+        -restart -agent -privs -all
+
+    - name: Install & Launch Bore Tunnel
+      run: |
+        # Mengunduh Bore versi macOS
+        curl -L https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-apple-darwin.tar.gz | tar -xz
+        chmod +x bore
+        
+        # Menjalankan bore di background
+        # Menghubungkan port 5900 (VNC) ke bore.pub
+        ./bore local 5900 --to bore.pub &
+        
+        echo "Menunggu koneksi tunnel..."
+        sleep 5
+
+    - name: Keep Alive & Monitoring
+      run: |
+        echo "macOS VNC sedang berjalan!"
+        echo "Gunakan aplikasi VNC Viewer (seperti RealVNC atau Screen Sharing)"
+        echo "Alamat IP/Host akan muncul di log di atas pada bagian Bore."
+        
+        # Loop untuk menjaga workflow tetap hidup
+        while true; do
+          ps aux | grep bore | grep -v grep > /dev/null
+          if [ $? -ne 0 ]; then
+            echo "Bore terputus, mencoba menghubungkan kembali..."
+            ./bore local 5900 --to bore.pub &
+          fi
+          sleep 300
+        done
