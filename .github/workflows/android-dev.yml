@@ -1,45 +1,69 @@
-name: Test Android Emulator on Standard Runner
+name: Debug Android KVM (Bore Tunnel)
 
-on: [push, workflow_dispatch]
+on: workflow_dispatch
 
 jobs:
-  test-emulator:
-    runs-on: ubuntu-latest # Ini runner biasa (gratisan)
+  rdp-kvm-bore:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Cek apakah CPU mendukung Virtualization
-      - name: Check for KVM support
-        run: |
-          echo "Checking for KVM support..."
-          kvm-ok || echo "KVM check failed or kvm-ok not installed"
-          echo "CPU Info (Virtualization):"
-          egrep -c '(vmx|svm)' /proc/cpuinfo || echo "No vmx/svm flags found"
-          ls -la /dev/kvm || echo "/dev/kvm not found"
-
-      # 2. Aktifkan permission KVM (Wajib dicoba)
+      # 1. Cek & Aktifkan KVM (Supaya Emulator Ngebut)
       - name: Enable KVM group perms
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm
 
-      # 3. Jalankan Emulator
-      - name: Run Android Emulator & Test
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 29
-          target: default
-          arch: x86_64
-          # profile: Nexus 6 # Opsional, pakai yang ringan
+      # 2. Install Desktop (XFCE) & RDP (XRDP)
+      # Estimasi: 2-3 menit
+      - name: Install XFCE & XRDP
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xfce4 xfce4-goodies xrdp
+          sudo sed -i.bak '/fi/a xfce4-session \n' /etc/xrdp/startwm.sh
+          sudo service xrdp start
+          echo "✅ Desktop Environment Installed"
+
+      # 3. Setup Android SDK & Image
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Install Emulator Image
+        run: |
+          yes | sdkmanager --licenses
+          # Install Android 29 (Android 10) x86_64
+          sdkmanager "system-images;android-29;default;x86_64" "platform-tools" "platforms;android-29" "emulator"
+          # Buat AVD
+          echo "no" | avdmanager create avd -n test -k "system-images;android-29;default;x86_64" --force
+
+      # 4. Install Bore (Tunneling Tool)
+      - name: Install Bore
+        run: |
+          # Download binary Bore versi stabil
+          wget -q https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xf bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
+          sudo mv bore /usr/local/bin/
+          rm bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
+          echo "✅ Bore Installed"
+
+      # 5. Start Tunnel & Tampilkan Port
+      - name: Start Bore Tunnel (RDP)
+        run: |
+          # Set Password User
+          echo "runner:password123" | sudo chpasswd
           
-          # PENTING:
-          # Jika KVM jalan, pakai gpu: 'host' atau 'auto'.
-          # Jika gagal boot/timeout, ganti jadi 'swiftshader_indirect' (software rendering).
-          emulator-options: -no-window -gpu auto -noaudio -no-boot-anim -camera-back none
+          echo "============================================="
+          echo "🟢 SIAP! Silakan Cek Log di bawah ini."
+          echo "Cari output seperti: 'Listening at bore.pub:XXXXX'"
+          echo "---------------------------------------------"
+          echo "👉 Host: bore.pub"
+          echo "👉 Port: (Lihat angka 5 digit di log bawah)"
+          echo "👉 User: runner"
+          echo "👉 Pass: password123"
+          echo "============================================="
           
-          disable-animations: true
-          
-          # Script dummy sekedar untuk memastikan emulator jalan
-          script: echo "Emulator is up and running!"
+          # Jalankan bore (Block terminal supaya session tidak mati)
+          bore local 3389 --to bore.pub
           
