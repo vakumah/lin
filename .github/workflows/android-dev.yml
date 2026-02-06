@@ -1,85 +1,43 @@
-name: Linux 
+name: linux-vnc-pro
 
 on: workflow_dispatch
 
 jobs:
-  vnc-session:
+  run:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Tuning & KVM
-      - name: System Tuning
+      - name: optimize system
         run: |
-          # Network Optimize
-          sudo sysctl -w net.core.default_qdisc=fq
-          sudo sysctl -w net.ipv4.tcp_congestion_control=bbr
-          sudo sysctl -w net.ipv4.tcp_window_scaling=1
-          
-          # Enable KVM
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          ls -la /dev/kvm
+          # 1. Network Tuning & KVM Barbaric Permission
+          sudo sysctl -w net.core.default_qdisc=fq net.ipv4.tcp_congestion_control=bbr net.ipv4.tcp_window_scaling=1
+          sudo chown $USER:$USER /dev/kvm 2>/dev/null || true
+          sudo chmod 777 /dev/kvm 2>/dev/null || true
 
-      # 2. Install Desktop 
-      - name: Install Desktop & Apps
-        env:
-          DEBIAN_FRONTEND: noninteractive
+      - name: install packages
         run: |
-          sudo apt-get update
-          # Tambah 'openbox' & 'xauth' untuk mencegah error startup
-          sudo apt-get install -y lxqt-core lxqt-session openbox tigervnc-standalone-server tigervnc-common firefox htop terminal.app xauth
-          
-          # Fix error .Xauthority does not exist
-          touch ~/.Xauthority
-          
-          # Setup VNC Password
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq lxqt openbox tigervnc-standalone-server tigervnc-common firefox htop terminal.app xauth curl
+
+      - name: setup vnc
+        run: |
           mkdir -p ~/.vnc
           echo "password123" | vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
-          
-          # --- PERBAIKAN UTAMA DI SINI ---
-          # Jangan pakai '&' di akhir command startlxqt
-          # Gunakan 'exec' supaya process menahan session
-          echo "#!/bin/sh" > ~/.vnc/xstartup
-          echo "unset SESSION_MANAGER" >> ~/.vnc/xstartup
-          echo "unset DBUS_SESSION_BUS_ADDRESS" >> ~/.vnc/xstartup
-          echo "exec startlxqt" >> ~/.vnc/xstartup
+          echo -e "#!/bin/sh\nunset SESSION_MANAGER\nunset DBUS_SESSION_BUS_ADDRESS\nexec startlxqt" > ~/.vnc/xstartup
           chmod +x ~/.vnc/xstartup
+          touch ~/.Xauthority
 
-      # 3. Setup Bore
-      - name: Setup Bore
+      - name: start session
         run: |
-          wget -q https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xf bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
-          sudo mv bore /usr/local/bin/
-          rm bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
-
-      # 4. Start VNC & Keep Alive
-      - name: Start Services
-        run: |
-          # Start VNC Server
           vncserver :1 -geometry 1280x720 -depth 24 -localhost no
           
-          echo "--------------------------------------"
-          echo " Starting Tunnel..."
-          echo "--------------------------------------"
+          # Download bore & run directly
+          curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz | tar -xz
+          sudo mv bore /usr/local/bin/
           
-          # Jalankan Bore di Background
-          bore local 5901 --to bore.pub > tunnel.log 2>&1 &
-          
-          # Tunggu sebentar
-          sleep 5
-          
-          echo "✅ CONNECT INFO:"
-          echo "--------------------------------------"
-          cat tunnel.log
-          echo "--------------------------------------"
-          echo "Password VNC: password123"
-          echo "--------------------------------------"
-          
-          # Keep Alive 6 Jam
-          echo "⛔ System Running... Do not cancel workflow."
-          sleep 21600
+          echo "Connect VNC with password: password123"
+          # Perintah ini menahan runner tetap hidup (Keep Alive)
+          bore local 5901 --to bore.pub
           
