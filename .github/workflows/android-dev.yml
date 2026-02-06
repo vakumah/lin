@@ -1,4 +1,4 @@
-name: Linux VNC Manual Setup
+name: Linux 
 
 on: workflow_dispatch
 
@@ -8,31 +8,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: System Tuning
+      # 1. Tuning System & KVM 
+      - name: Tuning & KVM
         run: |
-          sudo fallocate -l 8G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
+          # Optimasi Network (BBR) supaya RDP/VNC lancar
           sudo sysctl -w net.core.default_qdisc=fq
           sudo sysctl -w net.ipv4.tcp_congestion_control=bbr
           sudo sysctl -w net.ipv4.tcp_window_scaling=1
+          
+          # Aktifkan KVM (Supaya Emulator Android Cepat)
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm
 
-      - name: Install Environment
+      # 2. Install Desktop Environment
+      - name: Install Desktop & Apps
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
+          # Install LXQt (Ringan), TigerVNC, Firefox (Browser), Terminal
           sudo apt-get install -y lxqt-core lxqt-session tigervnc-standalone-server tigervnc-common firefox htop terminal.app
+          
+          # Setup VNC Password
           mkdir -p ~/.vnc
           echo "password123" | vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
+          
+          # Config Startup LXQt
           echo -e "#!/bin/sh\nunset SESSION_MANAGER\nunset DBUS_SESSION_BUS_ADDRESS\nstartlxqt &" > ~/.vnc/xstartup
           chmod +x ~/.vnc/xstartup
 
+      # 3. Setup Tunnel (Bore)
       - name: Setup Bore
         run: |
           wget -q https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
@@ -40,9 +48,33 @@ jobs:
           sudo mv bore /usr/local/bin/
           rm bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
 
-      - name: Start Services
+      # 4. Start VNC & KEEP ALIVE SCRIPT
+      - name: Start Services & Anti-Mati
         run: |
+          # Start VNC Server (720p)
           vncserver :1 -geometry 1280x720 -depth 24 -localhost no
-          echo "VNC Ready. Password: password123"
-          bore local 5901 --to bore.pub
+          
+          echo "--------------------------------------"
+          echo " Starting Tunnel..."
+          echo "--------------------------------------"
+          
+          # Jalankan Bore di Background & Simpan Log
+          bore local 5901 --to bore.pub > tunnel.log 2>&1 &
+          
+          # Tunggu 5 detik supaya dapat Port
+          sleep 5
+          
+          echo "✅ CONNECT INFO:"
+          echo "--------------------------------------"
+          # Tampilkan Port ke User
+          cat tunnel.log
+          echo "--------------------------------------"
+          echo "Password VNC: password123"
+          echo "--------------------------------------"
+          
+          # SCRIPT ANTI-MATI (Keep Alive)
+          # Ini akan menahan runner selama 6 jam (21600 detik)
+          # Walaupun bore error/putus, runner GAK AKAN mati.
+          echo "⛔ Mencegah Shutdown... System akan hidup selama 6 Jam."
+          sleep 21600
           
