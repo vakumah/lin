@@ -1,69 +1,48 @@
-name: Debug Android KVM (Bore Tunnel)
+name: Linux VNC Manual Setup
 
 on: workflow_dispatch
 
 jobs:
-  rdp-kvm-bore:
+  vnc-session:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Cek & Aktifkan KVM (Supaya Emulator Ngebut)
-      - name: Enable KVM group perms
+      - name: System Tuning
         run: |
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          sudo sysctl -w net.core.default_qdisc=fq
+          sudo sysctl -w net.ipv4.tcp_congestion_control=bbr
+          sudo sysctl -w net.ipv4.tcp_window_scaling=1
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          ls -la /dev/kvm
 
-      # 2. Install Desktop (XFCE) & RDP (XRDP)
-      # Estimasi: 2-3 menit
-      - name: Install XFCE & XRDP
+      - name: Install Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y xfce4 xfce4-goodies xrdp
-          sudo sed -i.bak '/fi/a xfce4-session \n' /etc/xrdp/startwm.sh
-          sudo service xrdp start
-          echo "✅ Desktop Environment Installed"
+          sudo apt-get install -y lxqt-core lxqt-session tigervnc-standalone-server tigervnc-common firefox htop terminal.app
+          mkdir -p ~/.vnc
+          echo "password123" | vncpasswd -f > ~/.vnc/passwd
+          chmod 600 ~/.vnc/passwd
+          echo -e "#!/bin/sh\nunset SESSION_MANAGER\nunset DBUS_SESSION_BUS_ADDRESS\nstartlxqt &" > ~/.vnc/xstartup
+          chmod +x ~/.vnc/xstartup
 
-      # 3. Setup Android SDK & Image
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-      
-      - name: Install Emulator Image
+      - name: Setup Bore
         run: |
-          yes | sdkmanager --licenses
-          # Install Android 29 (Android 10) x86_64
-          sdkmanager "system-images;android-29;default;x86_64" "platform-tools" "platforms;android-29" "emulator"
-          # Buat AVD
-          echo "no" | avdmanager create avd -n test -k "system-images;android-29;default;x86_64" --force
-
-      # 4. Install Bore (Tunneling Tool)
-      - name: Install Bore
-        run: |
-          # Download binary Bore versi stabil
           wget -q https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
           tar -xf bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
           sudo mv bore /usr/local/bin/
           rm bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
-          echo "✅ Bore Installed"
 
-      # 5. Start Tunnel & Tampilkan Port
-      - name: Start Bore Tunnel (RDP)
+      - name: Start Services
         run: |
-          # Set Password User
-          echo "runner:password123" | sudo chpasswd
-          
-          echo "============================================="
-          echo "🟢 SIAP! Silakan Cek Log di bawah ini."
-          echo "Cari output seperti: 'Listening at bore.pub:XXXXX'"
-          echo "---------------------------------------------"
-          echo "👉 Host: bore.pub"
-          echo "👉 Port: (Lihat angka 5 digit di log bawah)"
-          echo "👉 User: runner"
-          echo "👉 Pass: password123"
-          echo "============================================="
-          
-          # Jalankan bore (Block terminal supaya session tidak mati)
-          bore local 3389 --to bore.pub
+          vncserver :1 -geometry 1280x720 -depth 24 -localhost no
+          echo "VNC Ready. Password: password123"
+          bore local 5901 --to bore.pub
           
