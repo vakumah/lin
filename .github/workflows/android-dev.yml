@@ -1,188 +1,45 @@
-name: macOS noVNC with Bore (No Auth)
+name: Test Android Emulator on Standard Runner
 
-on:
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
-  macos-novnc-setup:
-    runs-on: macos-latest
-
+  test-emulator:
+    runs-on: ubuntu-latest # Ini runner biasa (gratisan)
     steps:
-    - name: System Info
-      run: |
-        echo "=== System Info ==="
-        sw_vers
-        echo "User: $(whoami)"
-        echo "==================="
+      - uses: actions/checkout@v4
 
-    - name: Disable Screen Saver & Sleep
-      run: |
-        # Disable screen saver
-        defaults -currentHost write com.apple.screensaver idleTime 0
-        
-        # Disable sleep mode
-        sudo pmset -a sleep 0
-        sudo pmset -a hibernatemode 0
-        sudo pmset -a disablesleep 1
-        sudo pmset -a displaysleep 0
-        
-        # Keep system awake
-        caffeinate -d -i -s &
-        
-        echo "Sleep mode disabled"
+      # 1. Cek apakah CPU mendukung Virtualization
+      - name: Check for KVM support
+        run: |
+          echo "Checking for KVM support..."
+          kvm-ok || echo "KVM check failed or kvm-ok not installed"
+          echo "CPU Info (Virtualization):"
+          egrep -c '(vmx|svm)' /proc/cpuinfo || echo "No vmx/svm flags found"
+          ls -la /dev/kvm || echo "/dev/kvm not found"
 
-    - name: Setup VNC Server (No Authentication)
-      run: |
-        # Install x11vnc via Homebrew (supports no-auth)
-        brew install x11vnc
-        
-        # Start x11vnc without password on port 5900
-        # -nopw = no password
-        # -forever = don't exit after first client disconnects
-        # -shared = allow multiple connections
-        # -rfbport = VNC port
-        # -bg = run in background
-        x11vnc -nopw -forever -shared -rfbport 5900 -bg -o /tmp/x11vnc.log 2>&1 || {
-          echo "x11vnc failed, trying built-in VNC..."
+      # 2. Aktifkan permission KVM (Wajib dicoba)
+      - name: Enable KVM group perms
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # 3. Jalankan Emulator
+      - name: Run Android Emulator & Test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          target: default
+          arch: x86_64
+          # profile: Nexus 6 # Opsional, pakai yang ringan
           
-          # Fallback: Enable built-in Screen Sharing
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -activate -configure -access -on \
-            -clientopts -setvnclegacy -vnclegacy yes \
-            -restart -agent -privs -all
+          # PENTING:
+          # Jika KVM jalan, pakai gpu: 'host' atau 'auto'.
+          # Jika gagal boot/timeout, ganti jadi 'swiftshader_indirect' (software rendering).
+          emulator-options: -no-window -gpu auto -noaudio -no-boot-anim -camera-back none
           
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -configure -allowAccessFor -allUsers
-        }
-        
-        sleep 2
-        echo "VNC Server started - NO PASSWORD"
-
-    - name: Install noVNC & websockify
-      run: |
-        # Install pipx untuk manage Python packages
-        brew install pipx
-        pipx ensurepath
-        
-        # Install websockify via pipx
-        pipx install websockify
-        
-        # Add pipx bin to PATH
-        export PATH="$HOME/.local/bin:$PATH"
-        
-        # Clone noVNC
-        git clone https://github.com/novnc/noVNC.git ~/noVNC
-        
-        echo "noVNC installed"
-
-    - name: Start noVNC Server
-      run: |
-        # Add pipx bin to PATH
-        export PATH="$HOME/.local/bin:$PATH"
-        
-        # Start websockify to bridge WebSocket (6080) to VNC (5900)
-        cd ~/noVNC
-        
-        # Start noVNC proxy
-        ~/.local/bin/websockify --web ~/noVNC 6080 localhost:5900 &
-        
-        # Wait for server to start
-        sleep 5
-        
-        # Verify it's running
-        if lsof -i :6080 > /dev/null 2>&1; then
-          echo "✅ noVNC server running on port 6080"
-        else
-          echo "Trying alternative..."
-          python3 -m websockify --web ~/noVNC 6080 localhost:5900 &
-          sleep 3
-        fi
-
-    - name: Install & Launch Bore Tunnel
-      run: |
-        # Download Bore for macOS
-        curl -L https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-aarch64-apple-darwin.tar.gz -o bore.tar.gz 2>/dev/null || \
-        curl -L https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-apple-darwin.tar.gz -o bore.tar.gz
-        tar -xzf bore.tar.gz
-        chmod +x bore
-        
-        # Start bore tunnel for noVNC (port 6080)
-        ./bore local 6080 --to bore.pub 2>&1 | tee bore.log &
-        BORE_PID=$!
-        
-        # Wait for bore to connect and get the port
-        sleep 10
-        
-        # Extract port from bore output
-        BORE_PORT=$(grep -oE 'bore\.pub:[0-9]+' bore.log | head -1 | cut -d: -f2)
-        
-        echo ""
-        echo "╔═══════════════════════════════════════════════════════════════════════════╗"
-        echo "║                        🖥️  noVNC ACCESS INFO                              ║"
-        echo "╠═══════════════════════════════════════════════════════════════════════════╣"
-        echo "║                                                                           ║"
-        echo "║  📌 URL (copy ke browser):                                                ║"
-        echo "║                                                                           ║"
-        if [ -n "$BORE_PORT" ]; then
-        echo "║  http://bore.pub:$BORE_PORT/vnc.html?autoconnect=true&encrypt=false        ║"
-        else
-        echo "║  Cek log di atas untuk port, lalu buka:                                   ║"
-        echo "║  http://bore.pub:PORT/vnc.html?autoconnect=true&encrypt=false             ║"
-        fi
-        echo "║                                                                           ║"
-        echo "║  ✅ NO PASSWORD - langsung connect!                                       ║"
-        echo "║                                                                           ║"
-        echo "║  ⚠️  Kalau error, coba: http://bore.pub:PORT/vnc_lite.html                ║"
-        echo "║                                                                           ║"
-        echo "╚═══════════════════════════════════════════════════════════════════════════╝"
-        echo ""
-        
-        # Show bore log for reference
-        echo "=== Bore Log ==="
-        cat bore.log
-        echo "================"
-
-    - name: Open Desktop Apps (for visibility)
-      run: |
-        # Open some apps so there's something to see
-        open -a Finder &
-        open -a Safari &
-        sleep 2
-        echo "Desktop apps opened"
-
-    - name: Keep Alive & Monitoring
-      run: |
-        echo "🖥️ noVNC server is running!"
-        echo "Access via browser using the bore.pub URL above"
-        echo ""
-        
-        # Show x11vnc log if exists
-        if [ -f /tmp/x11vnc.log ]; then
-          echo "=== x11vnc Log ==="
-          cat /tmp/x11vnc.log
-          echo "=================="
-        fi
-        
-        # Keep workflow alive
-        COUNTER=0
-        while true; do
-          COUNTER=$((COUNTER + 1))
-          echo "[$COUNTER] Session active... ($(date))"
+          disable-animations: true
           
-          # Check if noVNC is still running
-          if ! lsof -i :6080 > /dev/null 2>&1; then
-            echo "⚠️ noVNC stopped, restarting..."
-            export PATH="$HOME/.local/bin:$PATH"
-            ~/.local/bin/websockify --web ~/noVNC 6080 localhost:5900 &
-            sleep 3
-          fi
+          # Script dummy sekedar untuk memastikan emulator jalan
+          script: echo "Emulator is up and running!"
           
-          # Check if bore is still running
-          if ! pgrep -x bore > /dev/null; then
-            echo "⚠️ Bore stopped, restarting..."
-            ./bore local 6080 --to bore.pub &
-            sleep 5
-          fi
-          
-          sleep 300
-        done
