@@ -41,3 +41,11 @@ jobs:
           # Perintah ini menahan runner tetap hidup (Keep Alive)
           bore local 5901 --to bore.pub
           
+      - name: ⏳ Keep Alive 
+        run: |
+         echo "Server LXDE sedang berjalan..."
+         end=$((SECONDS+21600))
+         while [ $SECONDS -lt $end ]; do
+            echo "RDP Alive - Sisa waktu: $(( (end - SECONDS) / 60 )) menit"
+            sleep 60
+         done
