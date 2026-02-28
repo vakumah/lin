@@ -1,63 +1,43 @@
-name: macos-arm-novnc
+name: MacOS noVNC + Bore
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 jobs:
-  run:
-    runs-on: macos-14
+  mac-novnc:
+    runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: 1. Setup User & VNC Server
+      - name: Setup User & VNC
         run: |
-          sudo systemsetup -setcomputersleep Never
-          sudo systemsetup -setdisplaysleep Never
-          
-          # Buat User Admin
-          sudo sysadminctl -addUser admin -fullName "Administrator" -password "password123" -admin
+          USERNAME="vncuser"
+          PASSWORD="VNCpass123!"
 
-          # Aktifkan VNC Server Apple
-          KICKSTART="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
-          sudo $KICKSTART -deactivate -configure -access -off
-          sudo $KICKSTART -configure -allowAccessFor -allUsers -privs -all
-          sudo $KICKSTART -configure -clientopts -setvnclegacy -vnclegacy yes
-          sudo $KICKSTART -configure -clientopts -setvncpw -vncpw 12345678
-          sudo $KICKSTART -activate -restart -agent -console
+          sudo sysadminctl -addUser $USERNAME -fullName "VNC User" -password "$PASSWORD" -admin
+          sudo mkdir -p /Users/$USERNAME
+          sudo chown -R $USERNAME:staff /Users/$USERNAME
+          sudo dscl . -create /Users/$USERNAME NFSHomeDirectory /Users/$USERNAME
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -users $USERNAME -privs -all -clientopts -setvnclegacy -vnclegacy yes
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
 
-      - name: 2. Install noVNC & Websockify
+          echo "Username: $USERNAME"
+          echo "Password: $PASSWORD"
+
+      - name: Setup noVNC & Bore Tunnel
         run: |
-          # Download noVNC
-          git clone https://github.com/novnc/noVNC.git
-          git clone https://github.com/novnc/websockify noVNC/utils/websockify
-          
-          # Jalankan noVNC Proxy di background (Port 6080)
-          ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
-
-      - name: 3. Start Tunnel (Bore)
-        run: |
-          # Download bore
-          curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-aarch64-apple-darwin.tar.gz | tar -xz
-          sudo mv bore /usr/local/bin/
-          
-          # Forward PORT 6080 (Milik noVNC) ke public
-          bore local 6080 --to bore.pub > bore.log 2>&1 &
-          
-          sleep 5
-          echo "=========================================================="
-          echo "🌐 BUKA BROWSER (Chrome/Edge/Safari) DAN MASUKKAN LINK:"
-          cat bore.log
-          echo " "
-          echo "PENTING! Tambahkan 'http://' di depan dan '/vnc.html' di belakang"
-          echo "Contoh: http://bore.pub:12345/vnc.html"
-          echo "=========================================================="
-          echo "Password VNC: 12345678"
-          echo "User Mac: admin / password123"
-          echo "=========================================================="
-
-      - name: 4. Keep Alive 
-        run: |
-         end=$((SECONDS+21600))
-         while [ $SECONDS -lt $end ]; do
-            echo "Mac Alive (noVNC) - Sisa waktu: $(( (end - SECONDS) / 60 )) menit"
-            sleep 60
-         done
+          python3 -m pip install --user websockify
+          git clone https://github.com/novnc/noVNC.git --depth 1
+          cd noVNC
+          ~/.local/bin/websockify --web=. 6080 localhost:5900 > /dev/null 2>&1 &
+          brew install bore-cli
+          bore local 6080 --to bore.pub &
+          sleep 12
+          echo "=================================================="
+          echo "noVNC READY!"
+          echo "Buka browser sekarang:"
+          echo "http://bore.pub:PORT/vnc.html"
+          echo "(ganti PORT dengan nomor yang keluar di log bore di atas)"
+          echo ""
+          echo "Username : vncuser"
+          echo "Password : VNCpass123!"
+          echo "=================================================="
+          tail -f /dev/null
