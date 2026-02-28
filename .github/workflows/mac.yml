@@ -8,52 +8,56 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 1. Setup User & VNC (Fixed Sequence)
+      - name: 1. Setup Environment & User
         run: |
-          # 1. Buat User Admin Baru
+          # 1. Matikan Sleep & Screen Saver (PENTING biar gak black screen)
+          sudo systemsetup -setcomputersleep Never
+          sudo systemsetup -setdisplaysleep Never
+          sudo systemsetup -setharddisksleep Never
+          sudo defaults write /Library/Preferences/com.apple.screensaver loginWindowIdleTime 0
+          
+          # 2. Buat User Admin Baru
           sudo sysadminctl -addUser admin -fullName "Administrator" -password "password123" -admin
 
-          # Shortcut path agar perintah tidak kepanjangan
+          # 3. Setup VNC (Remote Management)
           KICKSTART="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
-
-          # 2. Matikan dulu service-nya biar bersih
-          sudo $KICKSTART -deactivate -configure -access -off
-
-          # 3. Setting izin akses untuk semua user
-          sudo $KICKSTART -configure -allowAccessFor -allUsers -privs -all
-
-          # 4. PENTING: Aktifkan VNC Legacy Mode (Biar bisa dibuka di Android/Windows)
-          sudo $KICKSTART -configure -clientopts -setvnclegacy -vnclegacy yes
-
-          # 5. Set Password VNC (Maksimal 8 Karakter! Jangan lebih)
-          # Password VNC: 12345678
-          sudo $KICKSTART -configure -clientopts -setvncpw -vncpw 12345678
-
-          # 6. Nyalakan Service & Restart Agent
-          sudo $KICKSTART -activate -restart -agent -console
           
-          # Cek apakah port 5900 sudah terbuka
-          echo "Cek Port VNC:"
-          netstat -an | grep 5900 || echo "WARNING: Port 5900 belum terlihat!"
+          # Matikan dulu
+          sudo $KICKSTART -deactivate -configure -access -off
+          
+          # Konfigurasi ulang
+          sudo $KICKSTART -configure -allowAccessFor -allUsers -privs -all
+          sudo $KICKSTART -configure -clientopts -setvnclegacy -vnclegacy yes
+          sudo $KICKSTART -configure -clientopts -setvncpw -vncpw 12345678
+          
+          # Nyalakan service
+          sudo $KICKSTART -activate -restart -agent -console
 
-      - name: 2. Start Tunnel & Session
+      - name: 2. Fix Black Screen (Restart LoginWindow)
+        run: |
+          # Ini trik untuk me-refresh layar login yang hitam
+          sudo killall -HUP loginwindow
+          sleep 2
+
+      - name: 3. Start Session
         run: |
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-aarch64-apple-darwin.tar.gz | tar -xz
           sudo mv bore /usr/local/bin/
           
           echo "=========================================="
-          echo "Address VNC akan muncul di bawah ini..."
           echo "Gunakan Password VNC: 12345678"
-          echo "Gunakan User Mac: admin / password123"
+          echo "Setelah layar muncul (mungkin perlu klik tengah layar):"
+          echo "Login User: Administrator"
+          echo "Login Pass: password123"
           echo "=========================================="
           
-          # Jalankan bore
+          # Bore dijalankan
           bore local 5900 --to bore.pub > bore.log 2>&1 &
           
           sleep 5
           cat bore.log
           
-      - name: 3. Keep Alive 
+      - name: 4. Keep Alive 
         run: |
          end=$((SECONDS+21600))
          while [ $SECONDS -lt $end ]; do
