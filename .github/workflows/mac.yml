@@ -8,20 +8,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: setup vnc and password
+      - name: setup vnc and new user
         run: |
-          sudo dscl . -passwd /Users/runner password123
+          # 1. Buat User Baru bernama "admin" dengan password "password123"
+          # Kita pakai sysadminctl yang lebih resmi dibanding dscl
+          sudo sysadminctl -addUser admin -fullName "Administrator" -password "password123" -admin
+
+          # 2. Aktifkan Screen Sharing / Remote Management
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -restart -agent -privs -all
+          
+          # 3. Izinkan Legacy VNC Auth (untuk koneksi awal)
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvnclegacy -vnclegacy yes
+          
+          # 4. Set Password VNC (Max 8 karakter untuk protokol VNC lama)
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvncpw -vncpw 12345678
 
       - name: start session
         run: |
-          # Download bore untuk macOS (Apple Silicon / aarch64)
+          # Download bore untuk macOS ARM64
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-aarch64-apple-darwin.tar.gz | tar -xz
           sudo mv bore /usr/local/bin/
           
-          # Jalankan bore di port 5900 (Port default VNC/Screen Sharing di Mac)
+          # Jalankan bore
+          echo "VNC Siap. Connect ke address di bawah."
           bore local 5900 --to bore.pub > bore.log 2>&1 &
           
           sleep 5
