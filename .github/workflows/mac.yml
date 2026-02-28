@@ -10,7 +10,6 @@ jobs:
 
       - name: 1. Setup User & Environment
         run: |
-          # Matikan Sleep & Screen Saver
           sudo systemsetup -setcomputersleep Never
           sudo systemsetup -setdisplaysleep Never
           
@@ -21,29 +20,27 @@ jobs:
         run: |
           KICKSTART="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
           
-          # Reset & Konfigurasi ulang
           sudo $KICKSTART -deactivate -configure -access -off
           sudo $KICKSTART -configure -allowAccessFor -allUsers -privs -all
           sudo $KICKSTART -configure -clientopts -setvnclegacy -vnclegacy yes
-          
-          # Set Password VNC: 12345678
           sudo $KICKSTART -configure -clientopts -setvncpw -vncpw 12345678
-          
-          # Restart Service
           sudo $KICKSTART -activate -restart -agent -console
 
-      - name: 📸 AMBIL SCREENSHOT (DEBUG)
+      - name: 📸 AMBIL SCREENSHOT (FIXED)
         run: |
-          echo "Sedang mengambil screenshot layar server..."
-          # Ambil screenshot layar utama
-          screencapture -x /tmp/screen_debug.jpg
+          echo "📸 Cekreeek! Mengambil screenshot..."
+          screencapture -x /tmp/screen.jpg
           
-          echo "Mengupload screenshot..."
-          # Upload ke 0x0.st (Hosting file sementara & cepat)
-          curl -F "file=@/tmp/screen_debug.jpg" https://0x0.st
+          echo "1️⃣ Uploading to 0x0.st..."
+          # Kita tambahkan -A "Mozilla/5.0" biar dikira browser Chrome/Firefox
+          curl -s -A "Mozilla/5.0" -F "file=@/tmp/screen.jpg" https://0x0.st
           
           echo " "
-          echo "⬆️ KLIK LINK DI ATAS UNTUK MELIHAT TAMPILAN LAYAR SAAT INI ⬆️"
+          echo "2️⃣ Uploading to Transfer.sh (Backup)..."
+          curl --upload-file /tmp/screen.jpg https://transfer.sh/screen.jpg
+          
+          echo " "
+          echo "⬆️ KLIK SALAH SATU LINK DI ATAS UNTUK LIHAT HASILNYA ⬆️"
 
       - name: 3. Start Session
         run: |
@@ -51,8 +48,9 @@ jobs:
           sudo mv bore /usr/local/bin/
           
           echo "=========================================="
-          echo "1. Password VNC: 12345678"
-          echo "2. Jika layar hitam -> Klik tengah layar -> Ketik: password123 -> Enter"
+          echo "VNC Password: 12345678"
+          echo "Mac User: admin"
+          echo "Mac Pass: password123"
           echo "=========================================="
           
           bore local 5900 --to bore.pub > bore.log 2>&1 &
