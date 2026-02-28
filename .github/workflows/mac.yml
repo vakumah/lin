@@ -8,50 +8,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 1. Setup Environment & User
+      - name: 1. Setup User & Environment
         run: |
-          # 1. Matikan Sleep & Screen Saver (PENTING biar gak black screen)
+          # Matikan Sleep agar tidak black screen berlebih
           sudo systemsetup -setcomputersleep Never
           sudo systemsetup -setdisplaysleep Never
-          sudo systemsetup -setharddisksleep Never
-          sudo defaults write /Library/Preferences/com.apple.screensaver loginWindowIdleTime 0
           
-          # 2. Buat User Admin Baru
+          # Buat User Admin Baru (Lebih stabil daripada pakai user runner)
+          # Username: admin
+          # Password: password123
           sudo sysadminctl -addUser admin -fullName "Administrator" -password "password123" -admin
 
-          # 3. Setup VNC (Remote Management)
+      - name: 2. Setup VNC Server
+        run: |
           KICKSTART="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
           
-          # Matikan dulu
+          # Reset konfigurasi remote management
           sudo $KICKSTART -deactivate -configure -access -off
           
-          # Konfigurasi ulang
+          # Konfigurasi ulang agar support VNC Viewer biasa
           sudo $KICKSTART -configure -allowAccessFor -allUsers -privs -all
           sudo $KICKSTART -configure -clientopts -setvnclegacy -vnclegacy yes
+          
+          # Set Password VNC (Hanya bisa max 8 karakter!)
+          # Password VNC: 12345678
           sudo $KICKSTART -configure -clientopts -setvncpw -vncpw 12345678
           
-          # Nyalakan service
+          # Jalankan Service
           sudo $KICKSTART -activate -restart -agent -console
 
-      - name: 2. Fix Black Screen (Restart LoginWindow)
-        run: |
-          # Ini trik untuk me-refresh layar login yang hitam
-          sudo killall -HUP loginwindow
-          sleep 2
-
-      - name: 3. Start Session
+      - name: 3. Start Bore & Session
         run: |
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-aarch64-apple-darwin.tar.gz | tar -xz
           sudo mv bore /usr/local/bin/
           
           echo "=========================================="
-          echo "Gunakan Password VNC: 12345678"
-          echo "Setelah layar muncul (mungkin perlu klik tengah layar):"
-          echo "Login User: Administrator"
-          echo "Login Pass: password123"
+          echo "1. Buka VNC Viewer -> Masukkan Address bore.pub"
+          echo "2. Masukkan Password VNC: 12345678"
+          echo "3. Saat Layar Hitam Muncul:"
+          echo "   - Klik mouse di tengah layar"
+          echo "   - Ketik: password123"
+          echo "   - Tekan ENTER"
           echo "=========================================="
           
-          # Bore dijalankan
+          # Jalankan bore
           bore local 5900 --to bore.pub > bore.log 2>&1 &
           
           sleep 5
