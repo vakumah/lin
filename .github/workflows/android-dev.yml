@@ -10,7 +10,6 @@ jobs:
 
       - name: optimize system
         run: |
-          # 1. Network Tuning & KVM Barbaric Permission
           sudo sysctl -w net.core.default_qdisc=fq net.ipv4.tcp_congestion_control=bbr net.ipv4.tcp_window_scaling=1
           sudo chown $USER:$USER /dev/kvm 2>/dev/null || true
           sudo chmod 777 /dev/kvm 2>/dev/null || true
@@ -18,14 +17,23 @@ jobs:
       - name: install packages
         run: |
           sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq lxqt openbox tigervnc-standalone-server tigervnc-common firefox htop terminal.app xauth curl
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq ubuntu-desktop-minimal dbus-x11 tigervnc-standalone-server tigervnc-common firefox htop gnome-terminal xauth curl
 
       - name: setup vnc
         run: |
           mkdir -p ~/.vnc
           echo "password123" | vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
-          echo -e "#!/bin/sh\nunset SESSION_MANAGER\nunset DBUS_SESSION_BUS_ADDRESS\nexec startlxqt" > ~/.vnc/xstartup
+          
+          cat << 'EOF' > ~/.vnc/xstartup
+          #!/bin/sh
+          unset SESSION_MANAGER
+          unset DBUS_SESSION_BUS_ADDRESS
+          export XDG_CURRENT_DESKTOP=ubuntu:GNOME
+          export GNOME_SHELL_SESSION_MODE=ubuntu
+          exec dbus-run-session -- gnome-session
+          EOF
+          
           chmod +x ~/.vnc/xstartup
           touch ~/.Xauthority
 
@@ -33,19 +41,18 @@ jobs:
         run: |
           vncserver :1 -geometry 1280x720 -depth 24 -localhost no
           
-          # Download bore & run directly
-          curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz | tar -xz
+          curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-aarch64-unknown-linux-musl.tar.gz | tar -xz
           sudo mv bore /usr/local/bin/
           
-          echo "Connect VNC with password: password123"
-          # Perintah ini menahan runner tetap hidup (Keep Alive)
-          bore local 5901 --to bore.pub
+          bore local 5901 --to bore.pub > bore.log 2>&1 &
           
-      - name: ⏳ Keep Alive 
+          sleep 5
+          cat bore.log
+          
+      - name: keep alive 
         run: |
-         echo "Server LXDE sedang berjalan..."
          end=$((SECONDS+21600))
          while [ $SECONDS -lt $end ]; do
-            echo "RDP Alive - Sisa waktu: $(( (end - SECONDS) / 60 )) menit"
+            echo "Time remaining: $(( (end - SECONDS) / 60 )) minutes"
             sleep 60
          done
