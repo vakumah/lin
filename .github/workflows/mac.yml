@@ -11,32 +11,31 @@ jobs:
         run: |
           USERNAME="vncuser"
           PASSWORD="VNCpass123!"
-
           sudo sysadminctl -addUser $USERNAME -fullName "VNC User" -password "$PASSWORD" -admin
           sudo mkdir -p /Users/$USERNAME
           sudo chown -R $USERNAME:staff /Users/$USERNAME
           sudo dscl . -create /Users/$USERNAME NFSHomeDirectory /Users/$USERNAME
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -users $USERNAME -privs -all -clientopts -setvnclegacy -vnclegacy yes
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
-
           echo "Username: $USERNAME"
           echo "Password: $PASSWORD"
 
       - name: Setup noVNC & Bore Tunnel
         run: |
-          python3 -m pip install --user websockify
+          brew install pipx bore-cli
+          pipx install websockify
           git clone https://github.com/novnc/noVNC.git --depth 1
           cd noVNC
           ~/.local/bin/websockify --web=. 6080 localhost:5900 > /dev/null 2>&1 &
-          brew install bore-cli
           bore local 6080 --to bore.pub &
-          sleep 12
+          sleep 15
           echo "=================================================="
-          echo "noVNC READY!"
-          echo "Buka browser sekarang:"
+          echo "noVNC SIAP!"
+          echo "Buka browser ini:"
           echo "http://bore.pub:PORT/vnc.html"
-          echo "(ganti PORT dengan nomor yang keluar di log bore di atas)"
+          echo "PORT = nomor yang muncul di log bore di atas"
           echo ""
+          echo "Login:"
           echo "Username : vncuser"
           echo "Password : VNCpass123!"
           echo "=================================================="
