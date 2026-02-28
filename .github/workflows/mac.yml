@@ -1,4 +1,4 @@
-name: MacOS noVNC + Bore
+name: MacOS noVNC + Cloudflare
 
 on:
   workflow_dispatch:
@@ -20,22 +20,21 @@ jobs:
           echo "Username: $USERNAME"
           echo "Password: $PASSWORD"
 
-      - name: Setup noVNC & Bore Tunnel
+      - name: Setup noVNC & Cloudflare Tunnel
         run: |
-          brew install pipx bore-cli
+          brew install cloudflared
           pipx install websockify
           git clone https://github.com/novnc/noVNC.git --depth 1
           cd noVNC
           ~/.local/bin/websockify --web=. 6080 localhost:5900 > /dev/null 2>&1 &
-          bore local 6080 --to bore.pub &
-          sleep 15
+          cloudflared tunnel --url http://localhost:6080 --no-autoupdate &
+          sleep 18
           echo "=================================================="
-          echo "noVNC SIAP!"
-          echo "Buka browser ini:"
-          echo "http://bore.pub:PORT/vnc.html"
-          echo "PORT = nomor yang muncul di log bore di atas"
+          echo "✅ noVNC SIAP PAKE HTTPS!"
+          echo "Buka link ini di browser:"
+          echo "https://[random].trycloudflare.com/vnc.html"
+          echo "(ganti [random] dengan alamat lengkap yang muncul di log atas)"
           echo ""
-          echo "Login:"
           echo "Username : vncuser"
           echo "Password : VNCpass123!"
           echo "=================================================="
