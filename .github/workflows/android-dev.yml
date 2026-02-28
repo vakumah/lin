@@ -1,4 +1,4 @@
-ubuntu-latest: linux-vnc-pro
+name: linux-vnc-pro 
 
 on: workflow_dispatch
 
