@@ -1,81 +1,36 @@
-name: macOS Desktop VNC
+name: macos-arm-vnc 
 
-on:
-  workflow_dispatch:
+on: workflow_dispatch
 
 jobs:
-  macos:
-    runs-on: macos-26
-    timeout-minutes: 360
-    
+  run:
+    runs-on: macos-14
     steps:
-      - name: Setup VNC with tricks
+      - uses: actions/checkout@v4
+
+      - name: setup vnc and password
         run: |
-          # Create VNC password file directly
-          mkdir -p ~/Library/Preferences
-          
-          # Method: Use sysadminctl to create user
-          sudo sysadminctl -addUser vncuser -password vnc123 -admin
-          
-          echo "User created!"
-          
-      - name: Enable Remote Desktop
+          sudo dscl . -passwd /Users/runner password123
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -restart -agent -privs -all
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvnclegacy -vnclegacy yes
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvncpw -vncpw 12345678
+
+      - name: start session
         run: |
-          # Enable ARD for the new user
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -activate \
-            -configure -allowAccessFor -allUsers \
-            -configure -clientopts -setvnclegacy -vnclegacy yes \
-            -restart -agent
+          # Download bore untuk macOS (Apple Silicon / aarch64)
+          curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-aarch64-apple-darwin.tar.gz | tar -xz
+          sudo mv bore /usr/local/bin/
           
-          # Set VNC password via kickstart
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -configure -clientopts -setvncpw -vncpw vnc123
+          # Jalankan bore di port 5900 (Port default VNC/Screen Sharing di Mac)
+          bore local 5900 --to bore.pub > bore.log 2>&1 &
           
-          sleep 2
-          
-          # Another method - write to preferences
-          echo "vnc123" | sudo tee /etc/vnc_password
-          
-          echo "Remote Desktop enabled!"
-          
-      - name: Check and Start SSH for backup access
-        run: |
-          # Enable SSH as backup
-          sudo systemsetup -setremotelogin on || true
-          
-          # Check what's running
-          echo "=== Checking ports ==="
-          sudo lsof -i -P | grep -E "5900|22|3283" || true
-          
-      - name: Install tmate for SSH tunnel
-        run: |
-          brew install tmate
-          
-      - name: Start VNC Tunnel
-        run: |
-          curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-aarch64-apple-darwin.tar.gz -o bore.tar.gz || \
-          curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-apple-darwin.tar.gz -o bore.tar.gz
-          tar -xzf bore.tar.gz
-          chmod +x bore
-          
-          echo ""
-          echo "========================================"
-          echo "🍎 macOS VNC"
-          echo "========================================"
-          echo "👤 Username: vncuser"
-          echo "🔑 Password: vnc123"
-          echo ""
-          echo "If VNC fails, use tmate SSH:"
-          echo "========================================"
-          
-          # Start tmate in background for SSH access
-          tmate -F &
           sleep 5
+          cat bore.log
           
-          # Show tmate SSH command  
-          tmate show-messages || true
-          
-          echo ""
-          echo "Starting VNC tunnel..."
-          ./bore local 5900 --to bore.pub
+      - name: keep alive 
+        run: |
+         end=$((SECONDS+21600))
+         while [ $SECONDS -lt $end ]; do
+            echo "Time remaining: $(( (end - SECONDS) / 60 )) minutes"
+            sleep 60
+         done
