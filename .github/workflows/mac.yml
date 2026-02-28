@@ -10,50 +10,52 @@ jobs:
 
       - name: 1. Setup User & Environment
         run: |
-          # Matikan Sleep agar tidak black screen berlebih
+          # Matikan Sleep & Screen Saver
           sudo systemsetup -setcomputersleep Never
           sudo systemsetup -setdisplaysleep Never
           
-          # Buat User Admin Baru (Lebih stabil daripada pakai user runner)
-          # Username: admin
-          # Password: password123
+          # Buat User Admin Baru
           sudo sysadminctl -addUser admin -fullName "Administrator" -password "password123" -admin
 
       - name: 2. Setup VNC Server
         run: |
           KICKSTART="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
           
-          # Reset konfigurasi remote management
+          # Reset & Konfigurasi ulang
           sudo $KICKSTART -deactivate -configure -access -off
-          
-          # Konfigurasi ulang agar support VNC Viewer biasa
           sudo $KICKSTART -configure -allowAccessFor -allUsers -privs -all
           sudo $KICKSTART -configure -clientopts -setvnclegacy -vnclegacy yes
           
-          # Set Password VNC (Hanya bisa max 8 karakter!)
-          # Password VNC: 12345678
+          # Set Password VNC: 12345678
           sudo $KICKSTART -configure -clientopts -setvncpw -vncpw 12345678
           
-          # Jalankan Service
+          # Restart Service
           sudo $KICKSTART -activate -restart -agent -console
 
-      - name: 3. Start Bore & Session
+      - name: 📸 AMBIL SCREENSHOT (DEBUG)
+        run: |
+          echo "Sedang mengambil screenshot layar server..."
+          # Ambil screenshot layar utama
+          screencapture -x /tmp/screen_debug.jpg
+          
+          echo "Mengupload screenshot..."
+          # Upload ke 0x0.st (Hosting file sementara & cepat)
+          curl -F "file=@/tmp/screen_debug.jpg" https://0x0.st
+          
+          echo " "
+          echo "⬆️ KLIK LINK DI ATAS UNTUK MELIHAT TAMPILAN LAYAR SAAT INI ⬆️"
+
+      - name: 3. Start Session
         run: |
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-aarch64-apple-darwin.tar.gz | tar -xz
           sudo mv bore /usr/local/bin/
           
           echo "=========================================="
-          echo "1. Buka VNC Viewer -> Masukkan Address bore.pub"
-          echo "2. Masukkan Password VNC: 12345678"
-          echo "3. Saat Layar Hitam Muncul:"
-          echo "   - Klik mouse di tengah layar"
-          echo "   - Ketik: password123"
-          echo "   - Tekan ENTER"
+          echo "1. Password VNC: 12345678"
+          echo "2. Jika layar hitam -> Klik tengah layar -> Ketik: password123 -> Enter"
           echo "=========================================="
           
-          # Jalankan bore
           bore local 5900 --to bore.pub > bore.log 2>&1 &
-          
           sleep 5
           cat bore.log
           
