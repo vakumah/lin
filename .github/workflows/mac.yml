@@ -1,4 +1,4 @@
-name: macos-arm-vnc 
+name: macos-arm-novnc
 
 on: workflow_dispatch
 
@@ -8,58 +8,56 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 1. Setup User & Environment
+      - name: 1. Setup User & VNC Server
         run: |
           sudo systemsetup -setcomputersleep Never
           sudo systemsetup -setdisplaysleep Never
           
-          # Buat User Admin Baru
+          # Buat User Admin
           sudo sysadminctl -addUser admin -fullName "Administrator" -password "password123" -admin
 
-      - name: 2. Setup VNC Server
-        run: |
+          # Aktifkan VNC Server Apple
           KICKSTART="/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart"
-          
           sudo $KICKSTART -deactivate -configure -access -off
           sudo $KICKSTART -configure -allowAccessFor -allUsers -privs -all
           sudo $KICKSTART -configure -clientopts -setvnclegacy -vnclegacy yes
           sudo $KICKSTART -configure -clientopts -setvncpw -vncpw 12345678
           sudo $KICKSTART -activate -restart -agent -console
 
-      - name: 📸 Ambil Screenshot
+      - name: 2. Install noVNC & Websockify
         run: |
-          # Tunggu sebentar biar UI loading
-          sleep 2
-          # Ambil screenshot layar
-          screencapture -x screen_capture.jpg
-          echo "Screenshot berhasil diambil."
+          # Download noVNC
+          git clone https://github.com/novnc/noVNC.git
+          git clone https://github.com/novnc/websockify noVNC/utils/websockify
+          
+          # Jalankan noVNC Proxy di background (Port 6080)
+          ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
 
-      - name: 📤 Upload Screenshot ke GitHub Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: BUKTI-LAYAR-MAC
-          path: screen_capture.jpg
-          retention-days: 1
-
-      - name: 3. Start Session
+      - name: 3. Start Tunnel (Bore)
         run: |
+          # Download bore
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-aarch64-apple-darwin.tar.gz | tar -xz
           sudo mv bore /usr/local/bin/
           
-          echo "=========================================="
-          echo "VNC Password: 12345678"
-          echo "Mac User: admin"
-          echo "Mac Pass: password123"
-          echo "=========================================="
+          # Forward PORT 6080 (Milik noVNC) ke public
+          bore local 6080 --to bore.pub > bore.log 2>&1 &
           
-          bore local 5900 --to bore.pub > bore.log 2>&1 &
           sleep 5
+          echo "=========================================================="
+          echo "🌐 BUKA BROWSER (Chrome/Edge/Safari) DAN MASUKKAN LINK:"
           cat bore.log
-          
+          echo " "
+          echo "PENTING! Tambahkan 'http://' di depan dan '/vnc.html' di belakang"
+          echo "Contoh: http://bore.pub:12345/vnc.html"
+          echo "=========================================================="
+          echo "Password VNC: 12345678"
+          echo "User Mac: admin / password123"
+          echo "=========================================================="
+
       - name: 4. Keep Alive 
         run: |
          end=$((SECONDS+21600))
          while [ $SECONDS -lt $end ]; do
-            echo "Mac Alive - Sisa waktu: $(( (end - SECONDS) / 60 )) menit"
+            echo "Mac Alive (noVNC) - Sisa waktu: $(( (end - SECONDS) / 60 )) menit"
             sleep 60
          done
