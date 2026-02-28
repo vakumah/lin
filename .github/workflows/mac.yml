@@ -26,21 +26,20 @@ jobs:
           sudo $KICKSTART -configure -clientopts -setvncpw -vncpw 12345678
           sudo $KICKSTART -activate -restart -agent -console
 
-      - name: 📸 AMBIL SCREENSHOT (FIXED)
+      - name: 📸 Ambil Screenshot
         run: |
-          echo "📸 Cekreeek! Mengambil screenshot..."
-          screencapture -x /tmp/screen.jpg
-          
-          echo "1️⃣ Uploading to 0x0.st..."
-          # Kita tambahkan -A "Mozilla/5.0" biar dikira browser Chrome/Firefox
-          curl -s -A "Mozilla/5.0" -F "file=@/tmp/screen.jpg" https://0x0.st
-          
-          echo " "
-          echo "2️⃣ Uploading to Transfer.sh (Backup)..."
-          curl --upload-file /tmp/screen.jpg https://transfer.sh/screen.jpg
-          
-          echo " "
-          echo "⬆️ KLIK SALAH SATU LINK DI ATAS UNTUK LIHAT HASILNYA ⬆️"
+          # Tunggu sebentar biar UI loading
+          sleep 2
+          # Ambil screenshot layar
+          screencapture -x screen_capture.jpg
+          echo "Screenshot berhasil diambil."
+
+      - name: 📤 Upload Screenshot ke GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BUKTI-LAYAR-MAC
+          path: screen_capture.jpg
+          retention-days: 1
 
       - name: 3. Start Session
         run: |
