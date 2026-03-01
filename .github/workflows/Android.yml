@@ -1,1 +1,93 @@
 
+name: Private Android Web Preview (Disposable Appetize)
+
+on:
+  workflow_dispatch: # Biar bisa dijalankan manual lewat tombol "Run workflow"
+
+jobs:
+  android-preview:
+    # Menggunakan image ARM64 Partner resmi dari GitHub (Ampere/Arm)
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. MENGAKTIFKAN KVM SESUAI REQUEST LU (Biar akses /dev/kvm kebuka buat user biasa)
+      - name: Enable KVM group perms
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          
+          # Verifikasi KVM apakah beneran nyala dan dapet akses
+          ls -al /dev/kvm
+
+      # 2. Install dependensi sistem yang dibutuhkan untuk Web Streaming
+      - name: Install System Dependencies (ADB & Scrcpy)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y adb scrcpy wget curl
+
+      # 3. Setup Node.js (Syarat wajib untuk ngejalanin ws-scrcpy)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 4. Clone & Install ws-scrcpy (Front-end Web-nya)
+      - name: Download & Setup ws-scrcpy
+        run: |
+          git clone https://github.com/NetrisTV/ws-scrcpy.git
+          cd ws-scrcpy
+          npm install
+
+      # 5. Eksekusi Emulator & Tunneling secara bersamaan
+      - name: Run Android Emulator & Start Web Streaming
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 33 # Android 13
+          target: google_apis
+          arch: arm64-v8a # Berjalan NATIVE 100% di ARM64 KVM
+          profile: pixel_6
+          force-avd-creation: false
+          disable-animations: true
+          # Parameter performa emulator headless
+          emulator-options: -no-window -gpu auto -noaudio -no-boot-anim -camera-back none
+          script: |
+            echo "✅ Emulator berhasil booting secara Native!"
+            
+            # --- START WEBSOCKET SCRCPY ---
+            echo "Menyalakan Web Server ws-scrcpy..."
+            cd ws-scrcpy
+            npm start &
+            sleep 5 # Tunggu sebentar biar server Node.js up di port 8000
+            
+            # --- START CLOUDFLARE TUNNEL ---
+            echo "Mengunduh Cloudflare Tunnel ARM64..."
+            wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64 -O cloudflared
+            chmod +x cloudflared
+            
+            echo "Membuka jalur ke internet..."
+            ./cloudflared tunnel --url http://localhost:8000 > ../tunnel.log 2>&1 &
+            
+            # --- GET TUNNEL URL ---
+            echo "Menunggu URL Publik dari Cloudflare..."
+            for i in {1..15}; do
+              URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' ../tunnel.log | head -n 1)
+              if [ ! -z "$URL" ]; then
+                break
+              fi
+              sleep 2
+            done
+            
+            echo "=========================================================="
+            echo "📱 APPETIZE CLONE LU UDAH NYALA! 📱"
+            echo "🔗 Klik link ini buat ngetes Emulator di Browser:"
+            echo "👉 $URL"
+            echo "=========================================================="
+            
+            # --- HOLD MACHINE ---
+            echo "⏳ Mesin ditahan selama 1 Jam. Lu bisa mainin emulator di link atas."
+            echo "🛑 CATATAN: Kalau udah selesai test, JANGAN LUPA KLIK 'CANCEL WORKFLOW' biar gak ngabisin limit Actions lu."
+            sleep 3600
