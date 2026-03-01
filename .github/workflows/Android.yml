@@ -29,15 +29,12 @@ jobs:
           
           echo "Menunggu Android booting..."
           
-          # Sistem tunggu pintar (Udah FIX typo spasi di bagian if)
           for i in {1..20}; do
             echo "Mencoba konek ADB (Percobaan $i)..."
             
             adb connect 127.0.0.1:5555 || true
-            
             STATUS=$(adb -s 127.0.0.1:5555 get-state 2>/dev/null || echo "offline")
             
-            # Wajib ada spasi antara if dan[
             if [ "$STATUS" == "device" ]; then
               echo "✅ Android berhasil menyala dan siap digunakan!"
               break
@@ -49,22 +46,27 @@ jobs:
           
           adb devices
 
-      - name: Setup Node.js (Syarat ws-scrcpy)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Setup Web UI (ws-scrcpy)
+      # =========================================================
+      # FIX 502 BAD GATEWAY: SEMUA PROSES DIGABUNG DI 1 STEP SINI
+      # =========================================================
+      - name: Start Web UI, Tunnel & Hold
         run: |
-          echo "Menyiapkan Web Streaming..."
+          echo "Menyiapkan Web Streaming (ws-scrcpy)..."
           git clone https://github.com/NetrisTV/ws-scrcpy.git
           cd ws-scrcpy
           npm install
+          
+          # Nyalain web di background
           npm start &
-          sleep 5
-
-      - name: Expose ke Internet (Cloudflare Tunnel)
-        run: |
+          
+          echo "Tunggu server Node.js up (10 detik)..."
+          sleep 10
+          
           echo "Mengunduh Cloudflare Tunnel..."
           wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64 -O cloudflared
           chmod +x cloudflared
@@ -76,7 +78,6 @@ jobs:
           for i in {1..15}; do
             URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' tunnel.log | head -n 1)
             
-            # Wajib ada spasi antara if dan [
             if [ ! -z "$URL" ]; then
               break
             fi
@@ -91,4 +92,6 @@ jobs:
           
           echo "⏳ Mesin ditahan selama 1 Jam."
           echo "🛑 JANGAN LUPA KLIK 'CANCEL WORKFLOW' kalau udah selesai test."
+          
+          # Nahan step ini biar gak selesai, otomatis web & tunnel gak dibunuh
           sleep 3600
