@@ -29,17 +29,16 @@ jobs:
           
           echo "Menunggu Android booting..."
           
-          # Sistem tunggu pintar biar gak langsung error (Fix bug Localhost IPv6)
+          # Sistem tunggu pintar (Udah FIX typo spasi di bagian if)
           for i in {1..20}; do
             echo "Mencoba konek ADB (Percobaan $i)..."
             
-            # PENTING: Pakai IP 127.0.0.1, JANGAN pakai localhost
             adb connect 127.0.0.1:5555 || true
             
-            # Cek apakah device udah beneran nyala (status 'device', bukan 'offline')
             STATUS=$(adb -s 127.0.0.1:5555 get-state 2>/dev/null || echo "offline")
             
-            if[ "$STATUS" == "device" ]; then
+            # Wajib ada spasi antara if dan[
+            if [ "$STATUS" == "device" ]; then
               echo "✅ Android berhasil menyala dan siap digunakan!"
               break
             fi
@@ -48,7 +47,6 @@ jobs:
             sleep 3
           done
           
-          # Tampilkan device yang konek biar kelihatan di log
           adb devices
 
       - name: Setup Node.js (Syarat ws-scrcpy)
@@ -77,7 +75,9 @@ jobs:
           echo "Menunggu URL Publik dari Cloudflare..."
           for i in {1..15}; do
             URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' tunnel.log | head -n 1)
-            if[ ! -z "$URL" ]; then
+            
+            # Wajib ada spasi antara if dan [
+            if [ ! -z "$URL" ]; then
               break
             fi
             sleep 2
