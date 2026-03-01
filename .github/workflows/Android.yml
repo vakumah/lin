@@ -1,93 +1,79 @@
-
-name: Private Android Web Preview (Disposable Appetize)
+name: Private Android Web Preview (Redroid ARM-Native)
 
 on:
-  workflow_dispatch: # Biar bisa dijalankan manual lewat tombol "Run workflow"
+  workflow_dispatch:
 
 jobs:
   android-preview:
-    # Menggunakan image ARM64 Partner resmi dari GitHub (Ampere/Arm)
     runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. MENGAKTIFKAN KVM SESUAI REQUEST LU (Biar akses /dev/kvm kebuka buat user biasa)
-      - name: Enable KVM group perms
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          
-          # Verifikasi KVM apakah beneran nyala dan dapet akses
-          ls -al /dev/kvm
-
-      # 2. Install dependensi sistem yang dibutuhkan untuk Web Streaming
-      - name: Install System Dependencies (ADB & Scrcpy)
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y adb scrcpy wget curl
+          sudo apt-get install -y adb wget curl
 
-      # 3. Setup Node.js (Syarat wajib untuk ngejalanin ws-scrcpy)
-      - name: Setup Node.js
+      - name: Run Native Android (Redroid Docker)
+        run: |
+          echo "Menyalakan Android via Docker (Native ARM64 tanpa KVM)..."
+          
+          # Jalankan Redroid Android 12 secara privileged agar tembus kernel
+          docker run -itd --rm --privileged \
+            --name redroid \
+            -p 5555:5555 \
+            redroid/redroid:12.0.0-latest \
+            androidboot.redroid_gpu_mode=guest \
+            androidboot.redroid_fps=30
+          
+          echo "Menunggu Android booting (cuma butuh beberapa detik)..."
+          sleep 10
+          
+          # Hubungkan ADB ke Android Docker
+          adb connect localhost:5555
+          adb wait-for-device
+          echo "✅ Android berhasil menyala dan terhubung ke ADB!"
+
+      - name: Setup Node.js (Syarat ws-scrcpy)
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # 4. Clone & Install ws-scrcpy (Front-end Web-nya)
-      - name: Download & Setup ws-scrcpy
+      - name: Setup Web UI (ws-scrcpy)
         run: |
+          echo "Menyiapkan Web Streaming..."
           git clone https://github.com/NetrisTV/ws-scrcpy.git
           cd ws-scrcpy
           npm install
+          npm start &
+          sleep 5 # Kasih jeda biar server web jalan
 
-      # 5. Eksekusi Emulator & Tunneling secara bersamaan
-      - name: Run Android Emulator & Start Web Streaming
-        uses: ReactiveCircus/android-emulator-runner@v2
-        with:
-          api-level: 33 # Android 13
-          target: google_apis
-          arch: arm64-v8a # Berjalan NATIVE 100% di ARM64 KVM
-          profile: pixel_6
-          force-avd-creation: false
-          disable-animations: true
-          # Parameter performa emulator headless
-          emulator-options: -no-window -gpu auto -noaudio -no-boot-anim -camera-back none
-          script: |
-            echo "✅ Emulator berhasil booting secara Native!"
-            
-            # --- START WEBSOCKET SCRCPY ---
-            echo "Menyalakan Web Server ws-scrcpy..."
-            cd ws-scrcpy
-            npm start &
-            sleep 5 # Tunggu sebentar biar server Node.js up di port 8000
-            
-            # --- START CLOUDFLARE TUNNEL ---
-            echo "Mengunduh Cloudflare Tunnel ARM64..."
-            wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64 -O cloudflared
-            chmod +x cloudflared
-            
-            echo "Membuka jalur ke internet..."
-            ./cloudflared tunnel --url http://localhost:8000 > ../tunnel.log 2>&1 &
-            
-            # --- GET TUNNEL URL ---
-            echo "Menunggu URL Publik dari Cloudflare..."
-            for i in {1..15}; do
-              URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' ../tunnel.log | head -n 1)
-              if [ ! -z "$URL" ]; then
-                break
-              fi
-              sleep 2
-            done
-            
-            echo "=========================================================="
-            echo "📱 APPETIZE CLONE LU UDAH NYALA! 📱"
-            echo "🔗 Klik link ini buat ngetes Emulator di Browser:"
-            echo "👉 $URL"
-            echo "=========================================================="
-            
-            # --- HOLD MACHINE ---
-            echo "⏳ Mesin ditahan selama 1 Jam. Lu bisa mainin emulator di link atas."
-            echo "🛑 CATATAN: Kalau udah selesai test, JANGAN LUPA KLIK 'CANCEL WORKFLOW' biar gak ngabisin limit Actions lu."
-            sleep 3600
+      - name: Expose ke Internet (Cloudflare Tunnel)
+        run: |
+          echo "Mengunduh Cloudflare Tunnel..."
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64 -O cloudflared
+          chmod +x cloudflared
+          
+          echo "Membuka jalur ke internet..."
+          ./cloudflared tunnel --url http://localhost:8000 > tunnel.log 2>&1 &
+          
+          echo "Menunggu URL Publik dari Cloudflare..."
+          for i in {1..15}; do
+            URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' tunnel.log | head -n 1)
+            if [ ! -z "$URL" ]; then
+              break
+            fi
+            sleep 2
+          done
+          
+          echo "=========================================================="
+          echo "📱 DISPOSABLE APPETIZE LU UDAH NYALA BRAY! 📱"
+          echo "🔗 Klik link ini buat ngetes Emulator di Browser:"
+          echo "👉 $URL"
+          echo "=========================================================="
+          
+          echo "⏳ Mesin ditahan selama 1 Jam."
+          echo "🛑 JANGAN LUPA KLIK 'CANCEL WORKFLOW' kalau udah selesai."
+          sleep 3600
