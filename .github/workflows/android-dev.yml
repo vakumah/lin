@@ -11,8 +11,17 @@ jobs:
       - name: optimize system
         run: |
           sudo sysctl -w net.core.default_qdisc=fq net.ipv4.tcp_congestion_control=bbr net.ipv4.tcp_window_scaling=1
-          sudo chown $USER:$USER /dev/kvm 2>/dev/null || true
-          sudo chmod 777 /dev/kvm 2>/dev/null || true
+
+      - name: Enable KVM group perms
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+            echo "KVM permissions configured via udev"
+          else
+            echo "KVM device not found - running in environment without KVM support"
+          fi
 
       - name: install packages
         run: |
