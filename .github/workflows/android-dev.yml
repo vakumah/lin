@@ -1,10 +1,10 @@
-name: linux-vnc-pro 
+name: linux-vnc-pro
 
 on: workflow_dispatch
 
 jobs:
   run:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -17,42 +17,37 @@ jobs:
       - name: install packages
         run: |
           sudo apt-get update -qq
-          # ubuntu-desktop-minimal dan gnome-terminal diganti menjadi xfce4 dan xfce4-terminal
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq xfce4 xfce4-terminal dbus-x11 tigervnc-standalone-server tigervnc-common firefox htop xauth curl
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq \
+            xfce4 xfce4-terminal dbus-x11 tigervnc-standalone-server \
+            tigervnc-common firefox htop xauth curl
 
       - name: setup vnc
         run: |
           mkdir -p ~/.vnc
           echo "password123" | vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
-          
-          # xstartup diubah untuk menjalankan XFCE
           cat << 'EOF' > ~/.vnc/xstartup
           #!/bin/sh
           unset SESSION_MANAGER
           unset DBUS_SESSION_BUS_ADDRESS
           exec dbus-run-session -- startxfce4
           EOF
-          
           chmod +x ~/.vnc/xstartup
           touch ~/.Xauthority
 
       - name: start session
         run: |
           vncserver :1 -geometry 1280x720 -depth 24 -localhost no
-          
-          curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-aarch64-unknown-linux-musl.tar.gz | tar -xz
+          curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
           sudo mv bore /usr/local/bin/
-          
           bore local 5901 --to bore.pub > bore.log 2>&1 &
-          
           sleep 5
           cat bore.log
-          
-      - name: keep alive 
+
+      - name: keep alive
         run: |
-         end=$((SECONDS+21600))
-         while [ $SECONDS -lt $end ]; do
+          end=$((SECONDS+21600))
+          while [ $SECONDS -lt $end ]; do
             echo "Time remaining: $(( (end - SECONDS) / 60 )) minutes"
             sleep 60
-         done
+          done
