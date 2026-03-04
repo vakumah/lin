@@ -1,0 +1,62 @@
+name: linux-vnc-pro-arm
+
+on: workflow_dispatch
+
+jobs:
+  run:
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: optimize system
+        run: |
+          sudo sysctl -w net.core.default_qdisc=fq net.ipv4.tcp_congestion_control=bbr net.ipv4.tcp_window_scaling=1
+
+      - name: Enable KVM group perms
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+            echo "KVM permissions configured via udev"
+          else
+            echo "KVM device not found - running in environment without KVM support"
+          fi
+
+      - name: install packages
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq \
+            xfce4 xfce4-terminal dbus-x11 tigervnc-standalone-server \
+            tigervnc-common firefox htop xauth curl
+
+      - name: setup vnc
+        run: |
+          mkdir -p ~/.vnc
+          echo "password123" | vncpasswd -f > ~/.vnc/passwd
+          chmod 600 ~/.vnc/passwd
+          cat << 'EOF' > ~/.vnc/xstartup
+          #!/bin/sh
+          unset SESSION_MANAGER
+          unset DBUS_SESSION_BUS_ADDRESS
+          exec dbus-run-session -- startxfce4
+          EOF
+          chmod +x ~/.vnc/xstartup
+          touch ~/.Xauthority
+
+      - name: start session
+        run: |
+          vncserver :1 -geometry 1280x720 -depth 24 -localhost no
+          curl -sL https://github.com/ekzhang/bore/releases/download/v0.6.0/bore-v0.6.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
+          sudo mv bore /usr/local/bin/
+          bore local 5901 --to bore.pub > bore.log 2>&1 &
+          sleep 5
+          cat bore.log
+
+      - name: keep alive
+        run: |
+          end=$((SECONDS+21600))
+          while [ $SECONDS -lt $end ]; do
+            echo "Time remaining: $(( (end - SECONDS) / 60 )) minutes"
+            sleep 60
+          done
